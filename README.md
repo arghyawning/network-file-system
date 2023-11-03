@@ -22,4 +22,3 @@ Course Project for the course CS3.301: <b>Operating Systems and Networks</b>
 - [Understanding multi level indexing for iNodes](https://www.cs.utexas.edu/~lorenzo/corsi/cs372/06F/hw/11sol.html)
 - https://book.mixu.net/distsys/
 - [Some Nice FS ideas](https://martinfowler.com/articles/patterns-of-distributed-systems/)
-- [Best Resource for starting the implementation](https://www3.nd.edu/~pbui/teaching/cse.30341.fa17/project06.html)
