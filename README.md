@@ -27,16 +27,9 @@ Course Project for the course CS3.301: <b>Operating Systems and Networks</b>
 
 - Trying to make changes simultaenously
 
-## Challenges faced
+### Challenges faced
 
 - We misunderstood the assignment initially, thinking we have to create a distributed file system from scratch
-
-<<<<<<< Updated upstream
 - Figuring out how to `git push` things simultaneously
-=======
-<<<<<<< HEAD
 - My changes radbrad
-=======
-- Figuring out how to `git push` things simultaneously
->>>>>>> refs/remotes/OSN-Project/main
->>>>>>> Stashed changes
+- Completing it in such a short period of time among athoer coursework
