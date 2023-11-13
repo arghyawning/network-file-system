@@ -23,11 +23,9 @@ Course Project for the course CS3.301: <b>Operating Systems and Networks</b>
 - https://book.mixu.net/distsys/
 - [Some Nice FS ideas](https://martinfowler.com/articles/patterns-of-distributed-systems/)
 
-<<<<<<< Updated upstream
 - Trying to make changes simultaenously
-=======
 
 ## Challenges faced
 
 - We misunderstood the assignment initially, thinking we have to create a distributed file system from scratch
->>>>>>> Stashed changes
+
