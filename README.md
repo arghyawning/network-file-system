@@ -10,7 +10,9 @@ Course Project for the course CS3.301: <b>Operating Systems and Networks</b>
 2021115008 - [Arghya Roy](mailto:arghya.roy@research.iiit.ac.in) <br>
 
 ### Resources used
+
 #### (kind of redundant since we don't need to implement a FS from scratch. It is much easier than what we were expecting)
+
 - MIT Lectures on Distributed systems
 - Chinese guy telling about DFS (nice video. Do watch) - [How to Design Distributed File System](https://www.youtube.com/watch?v=g6VWTEtUsQY)
 - https://book.mixu.net/distsys/
@@ -29,3 +31,4 @@ Course Project for the course CS3.301: <b>Operating Systems and Networks</b>
 
 - We misunderstood the assignment initially, thinking we have to create a distributed file system from scratch
 
+- Figuring out how to `git push` things simultaneously
