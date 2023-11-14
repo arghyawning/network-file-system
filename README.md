@@ -24,7 +24,7 @@ READ <filepath>
 Input format:
 
 ```bash
-READ <filepath>
+WRITE <filepath>
 ```
 
 ### delete
