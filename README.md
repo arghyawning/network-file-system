@@ -37,6 +37,9 @@ Course Project for the course CS3.301: <b>Operating Systems and Networks</b>
 - branched again
 - Completing it in such a short period of time among other coursework
 
+### Assumptions:
+- Each storage server has max 100 paths with each of max length 50  
+
 ## Files
 
 - `shell.c`: This is for initialisation, inputs, parsing, and calling the appropriate functions.
