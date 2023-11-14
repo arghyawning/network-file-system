@@ -36,3 +36,7 @@ Course Project for the course CS3.301: <b>Operating Systems and Networks</b>
 - Completing it in such a short period of time among athoer coursework
 - branched again
 - Completing it in such a short period of time among other coursework
+
+## Files
+
+- `shell.c`: This is for initialisation, inputs, parsing, and calling the appropriate functions.
