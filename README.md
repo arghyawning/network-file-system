@@ -9,6 +9,8 @@ Course Project for the course CS3.301: <b>Operating Systems and Networks</b>
 2021114008 - [Harinie Sivaramasethu](mailto:harinie.s@research.iiit.ac.in) <br>
 2021115008 - [Arghya Roy](mailto:arghya.roy@research.iiit.ac.in) <br>
 
+## Instructions to run
+
 ## Functionalities
 
 ### read
@@ -40,7 +42,7 @@ DELETE <filepath>
 Input format:
 
 ```bash
-COPY <source_filepath> <destination_filepath>
+COPY <source_filepath> <destination_path>
 ```
 
 ### create
@@ -58,6 +60,20 @@ Input format:
 ```bash
 FILEINFO <filepath>
 ```
+
+## File Structure
+
+- `include/`: Contains all the header files
+- `src/`: Contains all the source files
+  - `client.c`:
+  - `naming-server.c`:
+  - `storage-server.c`:
+- `Makefile`: For compiling the code
+- `shell.c`: This is for initialisation, inputs, parsing, and calling the appropriate functions.
+
+## Assumptions
+
+- Each storage server has max 100 paths with each of max length 50
 
 ---
 
@@ -77,22 +93,8 @@ FILEINFO <filepath>
 - https://book.mixu.net/distsys/
 - [Some Nice FS ideas](https://martinfowler.com/articles/patterns-of-distributed-systems/)
 
-- Trying to make changes simultaenously
-
 ### Challenges faced
 
 - We misunderstood the assignment initially, thinking we have to create a distributed file system from scratch
-- I'm working on branch f2
 - Figuring out how to `git push` things simultaneously
-- My changes radbrad
-- Completing it in such a short period of time among athoer coursework
-- branched again
 - Completing it in such a short period of time among other coursework
-
-### Assumptions:
-
-- Each storage server has max 100 paths with each of max length 50
-
-## Files
-
-- `shell.c`: This is for initialisation, inputs, parsing, and calling the appropriate functions.
