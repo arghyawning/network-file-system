@@ -16,7 +16,7 @@ void initializeSS(struct StorageServer *ss, const char *ip, int nmPort, int clPo
     ss->nameServerPort = nmPort;
     ss->clientPort = clPort;
 
-    for (i = 0; i < 100; i++)
+    for (i = 0; i < 100 && paths[i] != NULL; i++)
     {
         strcpy(ss->accessiblePaths[i], paths[i]);
     }
@@ -26,6 +26,7 @@ void initializeSS(struct StorageServer *ss, const char *ip, int nmPort, int clPo
 
 void sendDetailsToNamingServer(struct StorageServer *ss)
 {
+    int i;
     printf("Storage Server Details Sent to Naming Server:\n");
     printf("IP: %s\n", ss->ipAddress);
     printf("NM Port: %d\n", ss->nameServerPort);
@@ -41,7 +42,7 @@ int main()
 {
     struct StorageServer ss1;
 
-    initializeSS(&ss1, "192.168.1.1", 5001, 8001, (const char *[]){"/path1", "/path2"});
+    initializeSS(&ss1, "192.168.1.1", 5001, 8001, (const char *[]){"/path1", "/path2", NULL});
 
     return 0;
 }
