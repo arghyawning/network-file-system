@@ -78,9 +78,20 @@ int main()
         }
     }
 
+    FILE *op = fopen("storage/testsave.txt", "w");
+    if (op == NULL)
+    {
+        perror("[-]fopen error");
+        exit(1);
+    }
+
     printf("Message received: \n");
     for (int i = 0; i < chunksnum; i++)
+    {
         printf("%s", message[i]);
+        fprintf(op, "%s", message[i]);
+    }
+    fclose(op);
     printf("\n");
 
     close(sock);
