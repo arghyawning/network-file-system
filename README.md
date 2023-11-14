@@ -9,6 +9,58 @@ Course Project for the course CS3.301: <b>Operating Systems and Networks</b>
 2021114008 - [Harinie Sivaramasethu](mailto:harinie.s@research.iiit.ac.in) <br>
 2021115008 - [Arghya Roy](mailto:arghya.roy@research.iiit.ac.in) <br>
 
+## Functionalities
+
+### read
+
+Input format:
+
+```bash
+READ <filepath>
+```
+
+### write
+
+Input format:
+
+```bash
+READ <filepath>
+```
+
+### delete
+
+Input format:
+
+```bash
+DELETE <filepath>
+```
+
+### copy
+
+Input format:
+
+```bash
+COPY <source_filepath> <destination_filepath>
+```
+
+### create
+
+Input format:
+
+```bash
+CREATE <filepath>
+```
+
+### file information
+
+Input format:
+
+```bash
+FILEINFO <filepath>
+```
+
+---
+
 ### Resources used
 
 #### (kind of redundant since we don't need to implement a FS from scratch. It is much easier than what we were expecting)
@@ -38,7 +90,8 @@ Course Project for the course CS3.301: <b>Operating Systems and Networks</b>
 - Completing it in such a short period of time among other coursework
 
 ### Assumptions:
-- Each storage server has max 100 paths with each of max length 50  
+
+- Each storage server has max 100 paths with each of max length 50
 
 ## Files
 
