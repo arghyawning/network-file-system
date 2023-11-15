@@ -1,4 +1,5 @@
 #define MAXINPUTLENGTH 1024
+#define MAXBUFFER 1024
 
 int invalidPath(char *path);
 

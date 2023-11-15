@@ -5,9 +5,11 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <time.h>
+
+#include "colours.h"
 
 #include "shell.h"
-
-#define MAXINPUTLENGTH 1024
 
 #endif

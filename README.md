@@ -93,6 +93,10 @@ FILEINFO <filepath>
 - https://book.mixu.net/distsys/
 - [Some Nice FS ideas](https://martinfowler.com/articles/patterns-of-distributed-systems/)
 
+#### Miscelleneous Implementation Specific Resources
+
+- https://stackoverflow.com/questions/10323060/printing-file-permissions-like-ls-l-using-stat2-in-c
+
 ### Challenges faced
 
 - We misunderstood the assignment initially, thinking we have to create a distributed file system from scratch

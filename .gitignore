@@ -1,4 +1,5 @@
 notes.txt
 test/server
 test/client
-a.out
+*.o
+*.out
