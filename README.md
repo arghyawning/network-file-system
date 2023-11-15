@@ -96,6 +96,8 @@ FILEINFO <filepath>
 #### Miscelleneous Implementation Specific Resources
 
 - https://stackoverflow.com/questions/10323060/printing-file-permissions-like-ls-l-using-stat2-in-c
+- https://github.com/nikhilroxtomar/TCP-Client-Server-Implementation-in-C
+
 
 ### Challenges faced
 
