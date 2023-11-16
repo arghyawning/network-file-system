@@ -1,5 +1,10 @@
 {
     "files.associations": {
+<<<<<<< HEAD
         "shell.h": "c"
+=======
+        "unistd.h": "c",
+        "inet.h": "c"
+>>>>>>> origin/main
     }
 }
