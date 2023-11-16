@@ -37,41 +37,54 @@ struct DirectoryInfo
     char name[MAX_PATH_SIZE];
 };
 
-struct CombinedFilesInfo allCombinedFilesInfo[MAX_SS_NUM];
+struct CombinedFilesInfo combinedFilesInfoAll[MAX_SS_NUM];
 
-int fileSearch(char *searchfilename)
+int number_of_ss = MAX_SS_NUM; // for testing purposes
+
+typedef struct file_found
 {
-    int i, j, k;
-    int ssid = -1;
-    for (i = 0; i < MAX_SS_NUM; i++)
+    int ssid;   // storage server id
+    char *path; // path of the file
+} ff;
+
+// int fileSearch(char *searchfilename)
+ff fileSearch(char *searchfilename)
+{
+    ff found;
+    int i, j;
+    // int ssid = -1;
+    found.ssid = -1;
+    for (i = 0; i < number_of_ss + 1; i++)
     {
         // inside each storage server
-        for (j = 0; j < allCombinedFilesInfo[i].numberOfFiles; j++)
+        for (j = 0; j < combinedFilesInfoAll[i].numberOfFiles; j++)
         {
             // checking each file path
 
             // retrieving file name from path
-            char *filename = strrchr(allCombinedFilesInfo[i].files[j].name, '/');
+            char *filename = strrchr(combinedFilesInfoAll[i].files[j].name, '/') + 1;
             if (filename == NULL)
-                strcpy(filename, allCombinedFilesInfo[i].files[j].name);
+                strcpy(filename, combinedFilesInfoAll[i].files[j].name);
+            // printf("FileSearch %d: %s\n", j + 1, filename);
 
             // comparing file name with searchfilename
             if (strcmp(filename, searchfilename) == 0)
             {
-                ssid = i;
+                found.ssid = i;
+                strcpy(found.path, combinedFilesInfoAll[i].files[j].name);
                 break;
             }
         }
-        if (ssid >= 0)
+        if (found.ssid >= 0)
             break;
     }
 
-    if (ssid == -1)
+    if (found.ssid == -1)
         printf("File not found in any storage server\n");
     else
-        printf("File found on storage server %d\n", ssid);
+        printf("File found on storage server %d\n", found.ssid);
 
-    return ssid;
+    return found;
 }
 
 void nwc(int port, char *ip)
@@ -120,5 +133,5 @@ int main()
     char *searchfilename = (char *)malloc(100 * sizeof(char));
     scanf("%s", searchfilename);
     printf("Searching for %s\n", searchfilename);
-    int ssid = fileSearch(searchfilename);
+    ff filefound = fileSearch(searchfilename);
 }
