@@ -71,6 +71,7 @@ ff fileSearch(char *searchfilename)
             if (strcmp(filename, searchfilename) == 0)
             {
                 found.ssid = i;
+                found.path = (char *)malloc(MAX_PATH_SIZE * sizeof(char));
                 strcpy(found.path, combinedFilesInfoAll[i].files[j].name);
                 break;
             }
