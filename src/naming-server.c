@@ -6,7 +6,7 @@ int ss_connection_status[MAX_SS];
 
 int number_of_clients; //* Total number of clients attempted to connect
 int number_of_connected_clients;
-int client_connection_status[MAX_CLIENTS];
+// int client_connection_status[MAX_CLIENTS];
 
 //* Client-Connection Threads
 pthread_t clientThreads[MAX_CLIENTS];
@@ -183,99 +183,6 @@ struct CombinedFilesInfo deserializeData(char *buffer, struct StorageServerInfo 
     combinedFilesInfo.directories = directories_all;
 
     return combinedFilesInfo;
-}
-
-void *client_connection_(void *arg)
-{
-    struct ClientInfo *client = (struct ClientInfo *)arg;
-    int client_id = client->clientID;
-    printf("[+]Client %d thread created.\n", client_id + 1);
-    int socket_client;
-    struct sockaddr_in addr;
-    socklen_t size_address;
-
-    socket_client = socket(AF_INET, SOCK_STREAM, 0);
-    if (socket_client < 0)
-    {
-        perror("[-]Socket error");
-        close(socket_client);
-        exit(1);
-    }
-
-    printf("[+]Client %d socket created.\n", client_id + 1);
-
-    memset(&addr, '\0', sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(client->clientPort);
-    addr.sin_addr.s_addr = inet_addr(client->ipAddress);
-
-    size_address = sizeof(addr);
-
-    int connection_tries = 0;
-    while (1)
-    {
-        if (connect(socket_client, (struct sockaddr *)&addr, size_address) == 0)
-        {
-            printf("[+]Connected to Naming-Server.\n");
-            client_connection_status[client_id] = 1;
-            client->isConnected = 1;
-            break;
-        }
-        else
-        {
-            printf("[-]Connection attempt %d/%d to Naming-Server %d on PORT %d failed. Trying again...\n", connection_tries + 1, MAX_CONNECTION_TRIES, client_id + 1, client->clientPort);
-            connection_tries++;
-        }
-
-        if (connection_tries == MAX_CONNECTION_TRIES)
-        {
-            printf("[-]Could not connect to Naming-Server. Stopping further connection attempts\n");
-            close(socket_client);
-            pthread_exit(NULL);
-        }
-    }
-
-    int ticks = 0;
-
-    while (1)
-    {
-        int bytes_sent, bytes_received;
-        struct ClientInfo client_info;
-        sprintf(client_info.clientName, "Client %d", client_id + 1);
-        client_info.isConnected = 1;
-        bytes_sent = send(socket_client, &client_info, sizeof(client_info), 0);
-
-        if (bytes_sent == -1)
-        {
-            perror("Error sending request to Naming-Server");
-            close(socket_client);
-            client_connection_status[client_id] = 0;
-            client->isConnected = 0;
-            printf("[-]Connection to Naming-Server lost.\n");
-            break;
-        }
-
-        bytes_received = recv(socket_client, &client_info, sizeof(client_info), 0);
-        if (bytes_received == -1)
-        {
-            perror("Error receiving response from Naming-Server");
-            close(socket_client);
-            client_connection_status[client_id] = 0;
-            client->isConnected = 0;
-            printf("[-]Connection to Naming-Server lost.\n");
-            break;
-        }
-        else if (bytes_received == 0)
-        {
-            printf("Connection closed by the Naming-Server.\n");
-            close(socket_client);
-            client_connection_status[client_id] = 0;
-            client->isConnected = 0;
-            printf("[-]Connection to Naming-Server lost.\n");
-            break;
-        }
-        ticks++;
-    }
 }
 
 void *client_connection(void *arg)
@@ -614,7 +521,7 @@ void *first_connection_ss(void *arg)
             file.ssid = -1;
             file = fileSearchWithHash("ss");
             printf("File found on storage server %d\n", file.ssid);
-            printf("file path : %s\n", file.filepath);
+            printf("file path : %s\n", file.filepath.name);
 
             print_ss_info(&ss);
             struct storage_server_connection_struct ss_struct;

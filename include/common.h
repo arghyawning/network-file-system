@@ -24,6 +24,7 @@
 
 #define LEADER_SERVER_IP "127.0.0.1"
 #define STORAGE_SERVER_IP "127.0.0.1"
+#define CLIENT_IP "127.0.0.1"
 
 #define LEADER_SERVER_PORT_CLIENT 8000
 #define LEADER_SERVER_PORT 8080
@@ -37,6 +38,7 @@
 #define SERIALIZED_BUFFER_SIZE 4096
 #define MAX_PATH_SIZE 256
 #define MAX_BUFFER_SIZE 1024
+#define MAX_USERNAME_SIZE 32
 
 #define MAX_FILES 32
 
@@ -99,7 +101,8 @@ struct CombinedFilesInfo
 struct ClientInfo
 {
     int clientID;
-    char clientName[64];
+    char clientName[MAX_USERNAME_SIZE];
+    int sessionID;
     char ipAddress[16];
     int clientPort;
     int isConnected;
@@ -110,6 +113,8 @@ struct ClientRequest
     char buffer[64];
     int clientID;
 };
+
+int client_connection_status[MAX_CLIENTS];
 
 void scan_dir(struct FileInfo **files, struct DirectoryInfo **directories, struct NumberOfFiles *fileInfo);
 
