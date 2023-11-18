@@ -41,7 +41,7 @@ void readDirectoryRecursive(const char *basePath, struct FileInfo **files, struc
 
         while ((ent = readdir(dir)) != NULL)
         {
-            char filePath[512]; // Adjust the size according to your needs
+            char filePath[MAX_PATH_SIZE]; // Adjust the size according to your needs
             snprintf(filePath, sizeof(filePath), "%s/%s", basePath, ent->d_name);
 
             if (stat(filePath, &statbuf) == 0)

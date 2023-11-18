@@ -11,6 +11,127 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; // Mutex for synchronization
 int socket_ss_initial;                            //* initiate_ss
 int socket_server_heartbeat, socket_ss_heartbeat; //* Heartbeat Thread
 int socket_server_nm, socket_ss_nm;               //* NamingServerConnection Thread
+int socket_server_cc, socket_ss_cc;               //* ClientConnection Thread
+
+void readFile(char *filepath, int socket)
+{
+    FILE *fp = fopen(filepath, "r");
+    if (fp == NULL)
+    {
+        perror("[-] Error in reading file.");
+        exit(1);
+    }
+
+    struct Packet packet;
+    packet.packetNumber = 0; // Initialize packet number
+    packet.isStart = 1;
+    packet.isEnd = 0;
+
+    while (fgets(packet.data, READ_SIZE, fp) != NULL)
+    {
+        packet.packetNumber++;
+
+        if (send(socket, &packet, sizeof(struct Packet), 0) == -1)
+        {
+            perror("[-] Error in sending data");
+            exit(1);
+        }
+        printf("[+]Packet %d sent.\n", packet.packetNumber);
+    }
+
+    // Send an end-of-file packet
+    printf("[+]Sending end-of-file packet.\n");
+    packet.packetNumber++;
+    packet.isStart = 0;
+    packet.isEnd = 1;
+    if (send(socket, &packet, sizeof(struct Packet), 0) == -1)
+    {
+        perror("[-] Error in sending data");
+        exit(1);
+    }
+
+    fclose(fp);
+}
+
+void readFileInfo(char *filepath, int socket)
+{
+    struct stat fileStat;
+    if (stat(filepath, &fileStat) < 0)
+    {
+        printf("Cannot get file information \n");
+        return;
+    }
+    int bytes_sent;
+    bytes_sent = send(socket, &fileStat, sizeof(fileStat), 0);
+
+    if (bytes_sent == -1)
+    {
+        perror("Error sending data to client");
+        close(socket);
+        exit(EXIT_FAILURE);
+    }
+
+    return;
+}
+
+void writeToFile(char *filepath, int write_type, int socket)
+{
+
+    FILE *file;
+    if (write_type == 1)
+    {
+        file = fopen(filepath, "w");
+    }
+    else if (write_type == 2)
+    {
+        file = fopen(filepath, "a");
+    }
+
+    if (file == NULL)
+    {
+        perror("Error opening file for writing");
+        exit(EXIT_FAILURE);
+    }
+
+    struct PacketWrite packet;
+    int total_bytes_received = 0;
+
+    while (1)
+    {
+        // Receive the packet
+        ssize_t bytes_received = recv(socket, &packet, sizeof(struct PacketWrite), 0);
+
+        if (bytes_received == -1)
+        {
+            perror("Error receiving data");
+            break;
+        }
+        else if (bytes_received == 0)
+        {
+            // Connection closed by the client
+            break;
+        }
+
+        // Write the data to the file
+        // fwrite(packet.data, 1, strlen(packet.data), file);
+        fprintf(file, "%s", packet.data);
+        printf("[+]Packet %d received.\n", packet.packetNumber);
+        printf("[+]Data: %s\n", packet.data);
+        printf("[+]Data length: %ld\n", strlen(packet.data));
+        total_bytes_received += strlen(packet.data);
+
+        // Check for end of file
+        if (packet.isEnd)
+        {
+            // char null_char = '\0';
+            // fwrite(&null_char, 1, 1, file);
+            printf("End of file reached. Total bytes received: %d\n", total_bytes_received);
+            break;
+        }
+    }
+
+    fclose(file);
+}
 
 void close_socket(int socket)
 {
@@ -32,6 +153,8 @@ void handle_ctrl_c(int signum)
     close_socket(socket_ss_heartbeat);
     close_socket(socket_server_nm);
     close_socket(socket_ss_nm);
+    close_socket(socket_server_cc);
+    close_socket(socket_ss_cc);
     exit(0);
 }
 
@@ -43,6 +166,15 @@ void print_ss_info(struct StorageServerInfo *ss)
     printf("HeartBeat Port: %d\n", storage_server.heartbeatPort);
     printf("Is Connected: %d\n", ss->isConnected);
     printf("Storage Server ID: %d\n", ss->storageServerID);
+
+    return;
+}
+
+void print_client_request_info(struct Client_to_SS_Request *request)
+{
+    printf("Operation: %s\n", request->command);
+    printf("File Name: %s\n", request->file.name);
+    printf("Buffer: %s\n", request->buffer);
 
     return;
 }
@@ -127,9 +259,13 @@ void initiate_SS()
         printf("Directory %d : %s\n", i + 1, directories_all[i].name);
     }
 
+    for (int i = 0; i < MAX_REDUNDANT_SS; i++)
+    {
+        storage_server.redundant_ss[i] = -1;
+    }
     storage_server.numberOfFiles = file_structure.numberOfFiles;
     storage_server.numberOfDirectories = file_structure.numberOfDirectories;
-
+    getcwd(storage_server.ss_boot_path, sizeof(storage_server.ss_boot_path));
     char buffer[sizeof(struct StorageServerInfo) + sizeof(struct DirectoryInfo) * file_structure.numberOfDirectories + sizeof(struct FileInfo) * file_structure.numberOfFiles];
     serializeData(&storage_server, file_structure.numberOfFiles, file_structure.numberOfDirectories, directories_all, files_all, buffer);
 
@@ -145,7 +281,7 @@ void initiate_SS()
 
     //* will receive the storage server ID from Naming-Server
     int bytes_received;
-    int ss_id;
+    int ss_id = -1;
     bytes_received = recv(socket_ss_initial, &storage_server, sizeof(storage_server), 0);
     if (bytes_received == -1)
     {
@@ -385,17 +521,183 @@ void *namingServerConnectionThread(void *arg)
     pthread_exit(NULL);
 }
 
+void *clientConnectionThread(void *arg)
+{
+    struct sockaddr_in address_server, address_ss;
+    socklen_t size_address_client;
+
+    socket_server_cc = socket(AF_INET, SOCK_STREAM, 0);
+    if (socket_server_cc < 0)
+    {
+        perror("[-]Socket error");
+        close(socket_server_cc);
+        exit(1);
+    }
+
+    printf("[+]Storage-Server socket created.\n");
+
+    memset(&address_server, '\0', sizeof(address_server));
+    address_server.sin_family = AF_INET;
+    address_server.sin_port = htons(storage_server.clientPort);
+    address_server.sin_addr.s_addr = inet_addr(storage_server.ipAddress);
+    size_address_client = sizeof(address_ss);
+
+    if (bind(socket_server_cc, (struct sockaddr *)&address_server, sizeof(address_server)) < 0)
+    {
+        perror("[-]Bind error");
+        close(socket_server_cc);
+        exit(1);
+    }
+
+    if (listen(socket_server_cc, SERVER_BACKLOG) == 0)
+    {
+        printf("Storage-Server listening for connection from Client on PORT %d...\n", storage_server.clientPort);
+    }
+    else
+    {
+        perror("[-]Listening error");
+        close(socket_server_cc);
+        exit(1);
+    }
+
+    while (1)
+    {
+        socket_ss_cc = accept(socket_server_cc, (struct sockaddr *)&address_ss, &size_address_client);
+        if (socket_ss_cc < 0)
+        {
+            perror("[-]Accepting error");
+            close(socket_ss_cc);
+            continue;
+        }
+        printf("[+]Client connected.\n");
+
+        int bytes_received;
+        int bytes_sent;
+
+        struct Client_to_SS_Request request;
+
+        bytes_received = recv(socket_ss_cc, &request, sizeof(request), 0);
+
+        if (bytes_received == -1)
+        {
+            if (errno == EWOULDBLOCK || errno == EAGAIN)
+            {
+                printf("[-]Operation Would Block! Waiting for next recv().\n");
+            }
+            else if (errno == EINTR)
+            {
+                printf("[-]recv() was interrupted by a signal. Try again.\n");
+            }
+            else
+            {
+                perror("[-]recv() error");
+                close(socket_ss_cc);
+                break;
+            }
+        }
+        else if (bytes_received == 0)
+        {
+            printf("Connection closed by the Naming-Server.\n");
+            close(socket_ss_cc);
+            break;
+        }
+        else
+        {
+
+            print_client_request_info(&request);
+
+            //* READ
+            if (strcmp(request.command, "READ") == 0)
+            {
+                //* Check if file exists
+                int file_exists = 0;
+                for (int i = 0; i < file_structure.numberOfFiles; i++)
+                {
+                    if (strcmp(request.file.name, file_structure.files[i].name) == 0)
+                    {
+                        file_exists = 1;
+                        break;
+                    }
+                }
+
+                if (file_exists == 0)
+                {
+                    printf("File does not exist.\n");
+                    continue;
+                }
+
+                //* Send file to client
+                printf("Sending file to client...\n");
+                readFile(request.file.name, socket_ss_cc);
+                printf("File sent to client.\n");
+            }
+            else if (strcmp(request.command, "FILEINFO") == 0)
+            {
+                int file_exists = 0;
+                for (int i = 0; i < file_structure.numberOfFiles; i++)
+                {
+                    if (strcmp(request.file.name, file_structure.files[i].name) == 0)
+                    {
+                        file_exists = 1;
+                        break;
+                    }
+                }
+                if (file_exists == 0)
+                {
+                    printf("File does not exist.\n");
+                    continue;
+                }
+
+                //* Send file to client
+                printf("Sending file information to client...\n");
+                readFileInfo(request.file.name, socket_ss_cc);
+                printf("File Information sent to client.\n");
+            }
+            else if (strcmp(request.command, "WRITE") == 0)
+            {
+                int file_exists = 0;
+                for (int i = 0; i < file_structure.numberOfFiles; i++)
+                {
+                    if (strcmp(request.file.name, file_structure.files[i].name) == 0)
+                    {
+                        file_exists = 1;
+                        break;
+                    }
+                }
+                if (file_exists == 0)
+                {
+                    printf("File does not exist.\n");
+                    continue;
+                }
+
+                //* Send file to client
+                printf("Starting Write Operation...\n");
+                writeToFile(request.file.name, request.write_type, socket_ss_cc);
+                printf("File Written to.\n");
+            }
+        }
+        close(socket_ss_cc);
+        //? Should I close the thread?
+        printf("[+]Client disconnected.\n\n");
+        printf("Storage-Server listening for connection from Client on PORT %d...\n", storage_server.clientPort);
+    }
+
+    close(socket_server_cc);
+    pthread_exit(NULL);
+}
+
 int main()
 {
     signal(SIGINT, handle_ctrl_c);
 
-    int ss_port_number, client_port_number, heartbeat_port_number;
-    pthread_t heartbeat_thread, naming_server_connection;
+    pthread_t heartbeat_thread, naming_server_connection, client_connection;
 
     initiate_SS();
     pthread_create(&heartbeat_thread, NULL, heartbeatThread, NULL);
     pthread_create(&naming_server_connection, NULL, namingServerConnectionThread, NULL);
+    pthread_create(&client_connection, NULL, clientConnectionThread, NULL);
 
+    pthread_join(client_connection, NULL);
     pthread_join(naming_server_connection, NULL);
     pthread_join(heartbeat_thread, NULL);
     return 0;

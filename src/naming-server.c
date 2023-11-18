@@ -2,11 +2,11 @@
 
 int number_of_ss; //* Total number of SS attempted to connect
 int number_of_connected_ss;
-int ss_connection_status[MAX_SS];
+int ss_connection_status[MAX_SS] = {0};
 
 int number_of_clients; //* Total number of clients attempted to connect
 int number_of_connected_clients;
-// int client_connection_status[MAX_CLIENTS];
+int client_connection_status[MAX_CLIENTS];
 
 //* Client-Connection Threads
 pthread_t clientThreads[MAX_CLIENTS];
@@ -28,6 +28,22 @@ int PORTS_SS[MAX_SS * MAX_PORTS_PER_SS];
 int PORTS_CLIENTS[MAX_CLIENTS * MAX_PORTS_PER_SS];
 //* function to assign ports to SS
 
+int compareFilePath(const char *X, const struct StorageServerInfo *array)
+{
+    for (size_t i = 0; i < number_of_ss; i++)
+    {
+
+        if (strcmp(X, array[i].ss_boot_path) == 0)
+        {
+            // Match found
+            return i; // Return the index where the match was found
+        }
+    }
+
+    // No match found
+    return -1;
+}
+
 void assign_ports_ss(struct StorageServerInfo *ss)
 {
     int ss_id = ss->storageServerID;
@@ -46,6 +62,99 @@ void assign_ports_client(struct ClientInfo *client)
     client->clientPort = base_port;
 
     return;
+}
+
+//* function to assign two random storage-servers for redundancy except the main storage-server. The storage-server should be active
+void makeRedundantServers(struct StorageServerInfo *mainServer)
+{
+    printf("\n\nPreparing to assign Redundant-Servers for Storage-Server %d...\n", mainServer->storageServerID);
+    // Seed the random number generator with the current time
+    srand((unsigned int)time(NULL));
+    int numRedundantServers = MAX_REDUNDANT_SS;
+    // Count the number of active servers
+    int activeServerCount = number_of_connected_ss;
+    // for (int i = 0; i < MAX_SS; ++i)
+    // {
+    //     if (ss_connection_status[i] == 1)
+    //     {
+    //         activeServerCount++;
+    //     }
+    // }
+
+    // Check if there are no active servers (except the main server)
+    if (activeServerCount <= 1)
+    {
+        printf("No active storage servers to make redundant.\n");
+        return;
+    }
+
+    // Determine the number of redundant servers to assign
+
+    int indices_to_update[MAX_REDUNDANT_SS] = {-1};
+    int count = 0;
+    for (int i = 0; i < MAX_REDUNDANT_SS; i++)
+    {
+        if (mainServer->redundant_ss[i] == -1 || storageServers[mainServer->redundant_ss[i]].isConnected == 0)
+        {
+            indices_to_update[count] = i;
+            count++;
+        }
+    }
+    numRedundantServers = count;
+
+    int actualNumRedundantServers = (activeServerCount - 1 < numRedundantServers) ? (activeServerCount - 1) : numRedundantServers;
+    if (actualNumRedundantServers != numRedundantServers)
+    {
+        printf("Could not assign %d Redundant-Servers. Can allocate %d servers only.\n", numRedundantServers, actualNumRedundantServers);
+    }
+
+    // Randomly select redundant servers (apart from the main server)
+    int redundantServers[MAX_SS] = {0};
+    for (int i = 0; i < actualNumRedundantServers; i++)
+    {
+        if (indices_to_update[i] == -1)
+        {
+            redundantServers[mainServer->redundant_ss[indices_to_update[i]]] = 1;
+        }
+    }
+    // for (int i = 0; i < actualNumRedundantServers; ++i)
+    // {
+    //     int redundantServer;
+    //     while (1)
+    //     {
+    //         redundantServer = rand() % MAX_SS;
+    //         if (redundantServer != mainServer->storageServerID && ss_connection_status[redundantServer] == 1 && !redundantServers[redundantServer])
+    //         {
+    //             redundantServers[redundantServer] = 1;
+    //             break;
+    //         }
+    //     }
+
+    //     // Print or use the redundant server as needed
+    //     printf("Redundant Server %d: %d\n", i + 1, redundantServer);
+    // }
+
+    for (int i = 0; i < actualNumRedundantServers; ++i)
+    {
+        int redundantServer;
+        while (1)
+        {
+            redundantServer = rand() % MAX_SS;
+            if (redundantServer != mainServer->storageServerID && ss_connection_status[redundantServer] == 1 && !redundantServers[redundantServer])
+            {
+                redundantServers[redundantServer] = 1;
+                mainServer->redundant_ss[indices_to_update[i]] = redundantServer;
+                break;
+            }
+        }
+
+        // Print or use the redundant server as needed
+    }
+
+    for (int i = 0; i < MAX_REDUNDANT_SS; i++)
+    {
+        printf("Redundant-Server : %d\n", mainServer->redundant_ss[i]);
+    }
 }
 
 typedef struct file_found
@@ -99,9 +208,13 @@ void initialize_hash_table()
 
 void store_in_hash(struct CombinedFilesInfo *files)
 {
+    printf("I was here 7\n");
+
     for (int i = 0; i < files->numberOfFiles; i++)
     {
         char *filename = strrchr(files->files[i].name, '/') + 1;
+
+        printf("filename: %s\n", files->files[i].name);
         int key = strlen(filename);
         if (fileshash[key].num_files == MAX_FILES)
         {
@@ -111,7 +224,9 @@ void store_in_hash(struct CombinedFilesInfo *files)
 
         fileshash[key].files[fileshash[key].num_files] = (ff){files->storageServerID, files->files[i]};
         fileshash[key].num_files++;
+        printf("A key : %d\nfilename: %s\n", key, files->files[i].name);
     }
+    printf("I was here 8\n");
 }
 
 void print_hash_table()
@@ -128,6 +243,18 @@ void print_hash_table()
     }
 }
 
+void print_response_info(struct Client_to_NM_response response)
+{
+    printf("Transaction ID: %llu\n", response.transactionId);
+    printf("Operation Performer: %d\n", response.operation_performer);
+    printf("File Path: %s\n", response.file.name);
+    if (response.operation_performer == 2)
+    {
+        printf("Storage Server Port: %d\n", response.ss_port);
+        printf("Storage Server ID: %s\n", response.ss_ip);
+    }
+}
+
 void print_ss_info(struct StorageServerInfo *ss)
 {
     //* print ss info
@@ -137,6 +264,7 @@ void print_ss_info(struct StorageServerInfo *ss)
     printf("Client Port: %d\n", ss->clientPort);
     printf("Number of Files: %d\n", ss->numberOfFiles);
     printf("Number of Directories: %d\n", ss->numberOfDirectories);
+    printf("Storage-Server boot path: %s\n", ss->ss_boot_path);
     printf("Is Connected: %d\n", ss->isConnected);
 
     //* print files and directory information
@@ -150,6 +278,25 @@ void print_ss_info(struct StorageServerInfo *ss)
     }
 
     return;
+}
+
+void print_client_info(struct ClientInfo client)
+{
+    printf("Client ID: %d\n", client.clientID);
+    printf("Client Name: %s\n", client.clientName);
+    printf("Session ID: %d\n", client.sessionID);
+    printf("IP Address: %s\n", client.ipAddress);
+    printf("Client Port: %d\n", client.clientPort);
+    printf("Is Connected: %d\n", client.isConnected);
+}
+
+void print_client_request_info(struct ClientRequest client_request)
+{
+    printf("Client ID: %d\n", client_request.clientID);
+    printf("Transaction ID: %llu\n", client_request.transactionId);
+    printf("Operation: %s\n", client_request.command);
+    printf("Argument 1: %s\n", client_request.arguments[0]);
+    printf("Argument 2: %s\n", client_request.arguments[1]);
 }
 
 //* Deserialize the char buffer into StorageServerInfo, DirectoryInfo and FileInfo
@@ -184,6 +331,37 @@ struct CombinedFilesInfo deserializeData(char *buffer, struct StorageServerInfo 
 
     return combinedFilesInfo;
 }
+
+// void *checkRedundantServers(void *arg)
+// {
+
+//     while (1)
+//     {
+//         sleep(1);
+
+//         pthread_mutex_lock(&mutex_number_of_connected_ss);
+
+//         for (int i = 0; i < number_of_ss; i++)
+//         {
+//             if (storageServers[i].isConnected == 1)
+//             {
+//                 for (int j = 0; j < MAX_REDUNDANT_SS; j++)
+//                 {
+//                 }
+//             }
+//         }
+//         // Check if main server and its redundant servers are active
+//         if (ss_connection_status[mainServer->serverID] == 0 || number_of_active_ss < 2)
+//         {
+//             // Main server or one of the redundant servers is not active
+//             printf("Main server or redundant servers for Server %d are not active.\n", mainServer->serverID);
+//         }
+
+//         pthread_mutex_unlock(&mutex_number_of_connected_ss);
+//     }
+
+//     return NULL;
+// }
 
 void *client_connection(void *arg)
 {
@@ -244,7 +422,7 @@ void *client_connection(void *arg)
         int bytes_sent;
 
         struct ClientRequest client_request;
-
+        struct Client_to_NM_response response;
         while (1)
         {
 
@@ -277,12 +455,40 @@ void *client_connection(void *arg)
             }
             else
             {
-                printf("[+]%s.\n", client_request.buffer);
+                print_client_request_info(client_request);
+                response.transactionId = client_request.transactionId;
 
-                bytes_sent = send(socket_client, &client_request, sizeof(client_request), 0);
+                if (strcmp(client_request.command, "READ") == 0 || strcmp(client_request.command, "FILEINFO") == 0 || strcmp(client_request.command, "WRITE") == 0)
+                {
+                    ff file;
+                    file.ssid = -1;
+                    file = fileSearchWithHash(client_request.arguments[0]);
+                    printf("File found on storage server %d\n", file.ssid);
+                    printf("file path : %s\n", file.filepath.name);
+
+                    response.operation_performer = 2;
+                    response.ss_port = storageServers[file.ssid].clientPort;
+                    strcpy(response.ss_ip, storageServers[file.ssid].ipAddress);
+                    strcpy(response.file.name, file.filepath.name);
+                }
+                else if (strcmp(client_request.command, "CREATE") == 0 || strcmp(client_request.command, "DELETE") == 0 || strcmp(client_request.command, "COPY") == 0)
+                {
+                    ff file;
+                    file.ssid = -1;
+                    file = fileSearchWithHash(client_request.arguments[0]);
+                    printf("File found on storage server %d\n", file.ssid);
+                    printf("file path : %s\n", file.filepath.name);
+
+                    strcpy(response.file.name, file.filepath.name);
+                    response.operation_performer = 1;
+                }
+
+                print_response_info(response);
+
+                bytes_sent = send(socket_client, &response, sizeof(response), 0);
                 if (bytes_sent == -1)
                 {
-                    perror("Error sending data to Naming-Server");
+                    perror("Error sending data to Client");
                     close(socket_client);
                     close(socket_server_nm);
                     pthread_exit(NULL);
@@ -352,6 +558,13 @@ void *storage_server_heartbeat(void *arg)
         }
     }
 
+    pthread_mutex_lock(&mutex_number_of_connected_ss);
+    number_of_connected_ss++;
+    printf("\n\nNumber of connected storage servers: %d\n\n", number_of_connected_ss);
+    pthread_mutex_unlock(&mutex_number_of_connected_ss);
+
+    makeRedundantServers(&storageServers[ss_id]);
+
     int ticks = 0;
     while (1)
     {
@@ -393,7 +606,10 @@ void *storage_server_heartbeat(void *arg)
         ticks++;
         sleep(HEARTBEAT_PERIOD);
     }
-
+    pthread_mutex_lock(&mutex_number_of_connected_ss);
+    number_of_connected_ss--;
+    printf("\n\nNumber of connected storage servers: %d\n\n", number_of_connected_ss);
+    pthread_mutex_unlock(&mutex_number_of_connected_ss);
     pthread_exit(NULL);
 }
 
@@ -498,39 +714,59 @@ void *first_connection_ss(void *arg)
             combinedFilesInfo = deserializeData(buffer, &ss);
             files = combinedFilesInfo.files;
             directories = combinedFilesInfo.directories;
-            ss.storageServerID = number_of_ss;
-            combinedFilesInfo.storageServerID = ss.storageServerID;
-            assign_ports_ss(&ss);
 
-            combinedFilesInfoAll[number_of_ss] = combinedFilesInfo;
-            storageServers[number_of_ss] = ss;
-
-            store_in_hash(&combinedFilesInfoAll[number_of_ss]);
-            print_hash_table();
-
-            //* send updated storage-server
-            bytes_sent = send(socket_ss, &ss, sizeof(ss), 0);
-            if (bytes_sent == -1)
+            int server_exists = compareFilePath(ss.ss_boot_path, storageServers);
+            printf("I was here 1\n");
+            if (server_exists == -1)
             {
-                perror("Error sending SS-ID to storage server");
-                close(socket_ss);
-                break;
+                ss.storageServerID = number_of_ss;
+                combinedFilesInfo.storageServerID = ss.storageServerID;
+                assign_ports_ss(&ss);
+                printf("I was here 2\n");
+
+                combinedFilesInfoAll[number_of_ss] = combinedFilesInfo;
+                storageServers[number_of_ss] = ss;
+                printf("I was here 3\n");
+
+                printf("I was here 4\n");
+                store_in_hash(&combinedFilesInfoAll[number_of_ss]);
+                printf("I was here 5\n");
+
+                //* send updated storage-server
+                bytes_sent = send(socket_ss, &ss, sizeof(ss), 0);
+                if (bytes_sent == -1)
+                {
+                    perror("Error sending SS-ID to storage server");
+                    close(socket_ss);
+                    break;
+                }
+                printf("I was here 6\n");
+
+                print_ss_info(&ss);
+                struct storage_server_connection_struct ss_struct;
+                ss_struct.ss_id = number_of_ss;
+                pthread_create(&storageServerThreads[number_of_ss], NULL, storage_server_heartbeat, (void *)&ss_struct);
+
+                number_of_ss++;
             }
+            else
+            {
 
-            ff file;
-            file.ssid = -1;
-            file = fileSearchWithHash("ss");
-            printf("File found on storage server %d\n", file.ssid);
-            printf("file path : %s\n", file.filepath.name);
+                printf("Storage server already exists\n");
+                //* send updated storage-server
+                bytes_sent = send(socket_ss, &storageServers[server_exists], sizeof(storageServers[server_exists]), 0);
+                if (bytes_sent == -1)
+                {
+                    perror("Error sending SS-ID to storage server");
+                    close(socket_ss);
+                    break;
+                }
 
-            print_ss_info(&ss);
-            struct storage_server_connection_struct ss_struct;
-            ss_struct.ss_id = number_of_ss;
-            pthread_create(&storageServerThreads[number_of_ss], NULL, storage_server_heartbeat, (void *)&ss_struct);
-
-            // lock_mutex(&mutex_number_of_ss);
-            number_of_ss++;
-            // unlock_mutex(&mutex_number_of_ss);
+                print_ss_info(&storageServers[server_exists]);
+                struct storage_server_connection_struct ss_struct;
+                ss_struct.ss_id = server_exists;
+                pthread_create(&storageServerThreads[server_exists], NULL, storage_server_heartbeat, (void *)&ss_struct);
+            }
         }
 
         printf("[+]Current Storage-Server disconnected.\n\n");
@@ -632,10 +868,12 @@ void *first_connection_client(void *arg)
         else
         {
             client.clientID = number_of_clients;
+            client.sessionID = 0;
             assign_ports_client(&client);
 
             clients[number_of_clients] = client;
 
+            print_client_info(client);
             bytes_sent = send(socket_client, &client, sizeof(client), 0);
             if (bytes_sent == -1)
             {
@@ -652,13 +890,14 @@ void *first_connection_client(void *arg)
 
 int main()
 {
-
+    number_of_connected_ss = 0;
     pthread_t first_connection_client_thread, first_connection_ss_thread;
     initialize_hash_table();
     //* thread for listening to first connection from storage server
     pthread_create(&first_connection_ss_thread, NULL, first_connection_ss, NULL);
     pthread_create(&first_connection_client_thread, NULL, first_connection_client, NULL);
-    pthread_join(first_connection_ss_thread, NULL);
 
+    pthread_join(first_connection_ss_thread, NULL);
+    pthread_join(first_connection_client_thread, NULL);
     return 0;
 }

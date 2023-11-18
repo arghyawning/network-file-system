@@ -19,25 +19,44 @@ uint64_t generateTransactionId(uint32_t clientId)
 
 int main()
 {
+    char *buffer = NULL; // Initialize buffer pointer
+    size_t size = 0;     // Initialize size of the buffer
+    size_t index = 0;    // Initialize index for tracking the position in the buffer
 
-    // Generate a transaction ID
-    uint64_t transactionId = generateTransactionId(1);
+    printf("Enter characters (Ctrl+D to end on Unix/Linux, Ctrl+Z on Windows):\n");
 
-    // Create a message
-    RpcMessage message;
-    message.transactionId = transactionId;
+    int ch;
+    while ((ch = getchar()) != EOF && ch != '\n')
+    {
+        if (index == size)
+        {
+            // If the buffer is full, reallocate to double the size
+            size = (size == 0) ? 1 : size * 2;
+            buffer = realloc(buffer, size * sizeof(char));
 
-    // Send the message to the server
-    // ...
-    printf("%llu\n", message.transactionId);
+            if (buffer == NULL)
+            {
+                fprintf(stderr, "Memory allocation failed\n");
+                exit(EXIT_FAILURE);
+            }
+        }
 
-    //* print time
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
+        buffer[index++] = (char)ch;
+    }
 
-    long time_in_micros = 1000000 * tv.tv_sec + tv.tv_usec;
+    // Null-terminate the string
+    buffer = realloc(buffer, (index + 1) * sizeof(char));
+    if (buffer == NULL)
+    {
+        fprintf(stderr, "Memory allocation failed\n");
+        exit(EXIT_FAILURE);
+    }
+    buffer[index] = '\0';
 
-    printf("%ld\n", time_in_micros);
+    printf("Input received: %s\n", buffer);
+
+    // Free the allocated memory
+    free(buffer);
 
     return 0;
 }

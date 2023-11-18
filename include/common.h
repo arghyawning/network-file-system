@@ -16,6 +16,7 @@
 #include <signal.h>
 #include <time.h>
 #include <sys/time.h>
+#include <libgen.h>
 
 #include "colours.h"
 #include "ss.h"
@@ -35,15 +36,22 @@
 #define BASE_PORT_SS 5000
 #define BASE_PORT_CLIENT 6000
 
-#define SERIALIZED_BUFFER_SIZE 4096
+#define READ_SIZE 1024
+
+#define SERIALIZED_BUFFER_SIZE 8092
 #define MAX_PATH_SIZE 256
 #define MAX_BUFFER_SIZE 1024
 #define MAX_USERNAME_SIZE 32
+#define MAX_COMMAND_NAME 16
+#define MAX_INPUT_LENGTH (MAX_COMMAND_NAME + MAX_PATH_SIZE * 2 + 2)
+#define MAX_COMMAND_ARGUMENTS 2
+#define MAX_CHUNK_SIZE 16
 
 #define MAX_FILES 32
 
 #define MAX_SS 16
 #define MAX_CLIENTS 16
+#define MAX_REDUNDANT_SS 2
 
 #define HEARTBEAT_PERIOD 2
 #define RETRY_INTERVAL 1
@@ -78,6 +86,8 @@ struct StorageServerInfo
     int isConnected;
     int numberOfFiles;
     int numberOfDirectories;
+    char ss_boot_path[MAX_PATH_SIZE];
+    int redundant_ss[MAX_REDUNDANT_SS];
 };
 
 //? can remove this
@@ -110,11 +120,49 @@ struct ClientInfo
 
 struct ClientRequest
 {
-    char buffer[64];
+    uint64_t transactionId;
+    char command[MAX_COMMAND_NAME];
+    char arguments[MAX_COMMAND_ARGUMENTS][MAX_BUFFER_SIZE];
     int clientID;
 };
 
-int client_connection_status[MAX_CLIENTS];
+struct Client_to_NM_response
+{
+    uint64_t transactionId;
+    int operation_performer; //* 1 for NM and 2 for SS
+    int ss_port;
+    char ss_ip[16];
+    struct FileInfo file;
+};
+
+struct Client_to_SS_Request
+{
+    char buffer[64];
+    char command[MAX_COMMAND_NAME];
+    struct FileInfo file;
+    int write_type;
+};
+
+// struct Client_to_SS_Response{
+
+// };
+
+struct Packet
+{
+    int isStart; // 1 if start of file, 0 otherwise
+    int isEnd;   // 1 if end of file, 0 otherwise
+    int packetNumber;
+    char data[READ_SIZE];
+};
+
+struct PacketWrite
+{
+    int isStart;      // 1 if start of file, 0 otherwise
+    int isEnd;        // 1 if end of file, 0 otherwise
+    int packetNumber; // Packet number for tracking
+    int write_type;   // 1 for overwrite, 2 for append
+    char data[MAX_CHUNK_SIZE];
+};
 
 void scan_dir(struct FileInfo **files, struct DirectoryInfo **directories, struct NumberOfFiles *fileInfo);
 
