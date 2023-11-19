@@ -183,18 +183,6 @@ void writeToFile(char *filepath, int write_type, int socket)
     fclose(file);
 }
 
-void close_socket(int socket)
-{
-    if (close(socket) < 0)
-    {
-        perror("[-]Error closing socket");
-    }
-    else
-    {
-        printf("[+]Socket closed.\n");
-    }
-}
-
 void handle_ctrl_c(int signum)
 {
     printf("\nReceived Ctrl+C. Closing all sockets...\n");
@@ -206,48 +194,6 @@ void handle_ctrl_c(int signum)
     close_socket(socket_server_cc);
     close_socket(socket_ss_cc);
     exit(0);
-}
-
-void print_ss_info(struct StorageServerInfo *ss)
-{
-    printf("IP Address: %s\n", ss->ipAddress);
-    printf("Storage Server Port: %d\n", ss->storageServerPort);
-    printf("Client Port: %d\n", ss->clientPort);
-    printf("HeartBeat Port: %d\n", storage_server.heartbeatPort);
-    printf("Is Connected: %d\n", ss->isConnected);
-    printf("Storage Server ID: %d\n", ss->storageServerID);
-
-    return;
-}
-
-void print_client_request_info(struct Client_to_SS_Request *request)
-{
-    printf("Operation: %s\n", request->command);
-    printf("File Name: %s\n", request->file.name);
-    printf("Buffer: %s\n", request->buffer);
-
-    return;
-}
-
-//* Serialize the the StorageServerInfo, DirectoryInfo and FileInfo into a char buffer to send in a single send() call
-void serializeData(struct StorageServerInfo *ss, int nFiles, int nDirectories, struct DirectoryInfo directories_all[], struct FileInfo files_all[], char *buffer)
-{
-    // print_ss_info(ss);
-    memcpy(buffer, ss, sizeof(struct StorageServerInfo));
-    // printf("Buffer: %s\n", buffer);
-    // Calculate the offset for DirectoryInfo
-    size_t offset = sizeof(struct StorageServerInfo);
-    // printf("Offset: %d\n", offset);
-    // Serialize DirectoryInfo
-    memcpy(buffer + offset, directories_all, sizeof(struct DirectoryInfo) * nDirectories);
-    // printf("Buffer: %s\n", buffer);
-    // Calculate the new offset for FileInfo
-    offset += sizeof(struct DirectoryInfo) * nDirectories;
-    // printf("Offset: %d\n", offset);
-    // Serialize FileInfo
-    memcpy(buffer + offset, files_all, sizeof(struct FileInfo) * nFiles);
-
-    // printf("Buffer: %s\n", buffer);
 }
 
 //* Initiate the Storage Server
@@ -348,7 +294,9 @@ void initiate_SS()
 
     storage_server.storageServerID = ss_id + 1;
 
-    print_ss_info(&storage_server);
+    struct CombinedFilesInfo combinedFilesInfo;
+    // combinedFilesInfo = deserializeData(buffer, &storage_server);
+    // print_ss_info(&storage_server, combinedFilesInfo);
 
     close(socket_ss_initial);
 
@@ -520,121 +468,118 @@ void *namingServerConnectionThread(void *arg)
         int bytes_sent;
 
         struct ClientRequest request;
-        while (1)
+
+        bytes_received = recv(socket_ss_nm, &request, sizeof(request), 0);
+
+        if (bytes_received == -1)
         {
-
-            bytes_received = recv(socket_ss_nm, &request, sizeof(request), 0);
-
-            if (bytes_received == -1)
+            if (errno == EWOULDBLOCK || errno == EAGAIN)
             {
-                if (errno == EWOULDBLOCK || errno == EAGAIN)
-                {
-                    printf("[-]Operation Would Block! Waiting for next recv().\n");
-                }
-                else if (errno == EINTR)
-                {
-                    printf("[-]recv() was interrupted by a signal. Try again.\n");
-                }
-                else
-                {
-                    perror("[-]recv() error");
-                    close(socket_ss_nm);
-                    break;
-                }
+                printf("[-]Operation Would Block! Waiting for next recv().\n");
             }
-            else if (bytes_received == 0)
+            else if (errno == EINTR)
             {
-                printf("Connection closed by the Naming-Server.\n");
-                close(socket_ss_nm);
-                break;
+                printf("[-]recv() was interrupted by a signal. Try again.\n");
             }
             else
             {
+                perror("[-]recv() error");
+                close(socket_ss_nm);
+                break;
+            }
+        }
+        else if (bytes_received == 0)
+        {
+            printf("Connection closed by the Naming-Server.\n");
+            close(socket_ss_nm);
+            break;
+        }
+        else
+        {
+            printf("[+]%s.\n", request.command);
+            if (strcmp(request.command, "CREATE") == 0)
+            {
+                if (strcmp(request.arguments[0], "FILE") == 0)
+                {
+                    printf("Creating file...\n");
+                    FILE *fp = fopen(request.arguments[1], "w");
+                    if (fp == NULL)
+                    {
+                        perror("[-] Error in creating file.");
+                        exit(1);
+                    }
+                    fclose(fp);
+                    printf("File created.\n");
+                }
+                else if (strcmp(request.arguments[0], "DIR") == 0)
+                {
+                    printf("Creating directory...\n");
+                    if (mkdir(request.arguments[1], 0777) == -1)
+                    {
+                        perror("[-] Error in creating directory.");
+                        exit(1);
+                    }
+                    printf("Directory created.\n");
+                }
+            }
+            else if (strcmp(request.command, "DELETE") == 0)
+            {
+                if (strcmp(request.arguments[0], "FILE") == 0)
+                {
+                    printf("Deleting file...\n");
+                    if (remove(request.arguments[1]) == 0)
+                    {
+                        printf("File '%s' removed successfully.\n", request.arguments[1]);
+                    }
+                    else
+                    {
+                        perror("Error removing file");
+                    }
+                    printf("File removed.\n");
+                }
+                else if (strcmp(request.arguments[0], "DIR") == 0)
+                {
+                    printf("Deleting directory...\n");
+                    removeDirectoryRecursive(request.arguments[1]);
+                    printf("Directory created.\n");
+                }
+            }
+            // else if (strcmp(request.command, "COPY") == 0)
+            // {
+            //     printf("Copying file...\n");
+            //     FILE *fptr1, *fptr2;
+            //     char c;
+            //     fptr1 = fopen(request.file.name, "r");
+            //     if (fptr1 == NULL)
+            //     {
+            //         printf("Cannot open file %s \n", request.file.name);
+            //         exit(0);
+            //     }
+            //     fptr2 = fopen(request.buffer, "w");
+            //     if (fptr2 == NULL)
+            //     {
+            //         printf("Cannot open file %s \n", request.buffer);
+            //         exit(0);
+            //     }
+            //     c = fgetc(fptr1);
+            //     while (c != EOF)
+            //     {
+            //         fputc(c, fptr2);
+            //         c = fgetc(fptr1);
+            //     }
+            //     printf("File copied successfully.\n");
+            //     fclose(fptr1);
+            //     fclose(fptr2);
+            // }
 
-                if (strcmp(request.command, "CREATE") == 0)
-                {
-                    if (strcmp(request.arguments[0], "FILE") == 0)
-                    {
-                        printf("Creating file...\n");
-                        FILE *fp = fopen(request.arguments[1], "w");
-                        if (fp == NULL)
-                        {
-                            perror("[-] Error in creating file.");
-                            exit(1);
-                        }
-                        fclose(fp);
-                        printf("File created.\n");
-                    }
-                    else if (strcmp(request.arguments[0], "DIR") == 0)
-                    {
-                        printf("Creating directory...\n");
-                        if (mkdir(request.arguments[1], 0777) == -1)
-                        {
-                            perror("[-] Error in creating directory.");
-                            exit(1);
-                        }
-                        printf("Directory created.\n");
-                    }
-                }
-                else if (strcmp(request.command, "DELETE") == 0)
-                {
-                    if (strcmp(request.arguments[0], "FILE") == 0)
-                    {
-                        printf("Deleting file...\n");
-                        if (remove(request.arguments[1]) == 0)
-                        {
-                            printf("File '%s' removed successfully.\n", request.arguments[1]);
-                        }
-                        else
-                        {
-                            perror("Error removing file");
-                        }
-                        printf("File removed.\n");
-                    }
-                    else if (strcmp(request.arguments[0], "DIR") == 0)
-                    {
-                        printf("Deleting directory...\n");
-                        removeDirectoryRecursive(request.arguments[1]);
-                        printf("Directory created.\n");
-                    }
-                }
-                // else if (strcmp(request.command, "COPY") == 0)
-                // {
-                //     printf("Copying file...\n");
-                //     FILE *fptr1, *fptr2;
-                //     char c;
-                //     fptr1 = fopen(request.file.name, "r");
-                //     if (fptr1 == NULL)
-                //     {
-                //         printf("Cannot open file %s \n", request.file.name);
-                //         exit(0);
-                //     }
-                //     fptr2 = fopen(request.buffer, "w");
-                //     if (fptr2 == NULL)
-                //     {
-                //         printf("Cannot open file %s \n", request.buffer);
-                //         exit(0);
-                //     }
-                //     c = fgetc(fptr1);
-                //     while (c != EOF)
-                //     {
-                //         fputc(c, fptr2);
-                //         c = fgetc(fptr1);
-                //     }
-                //     printf("File copied successfully.\n");
-                //     fclose(fptr1);
-                //     fclose(fptr2);
-                // }
-
-                struct NM_to_SS_Response response;
-                response.operation_status = 1;
-                bytes_sent = send(socket_ss_nm, &response, sizeof(response), 0);
-                if (bytes_sent == -1)
-                {
-                    perror("Error sending data to Naming-Server");
-                    close(socket_ss_nm);
-                    break;
-                }
+            struct NM_to_SS_Response response;
+            response.operation_status = 1;
+            bytes_sent = send(socket_ss_nm, &response, sizeof(response), 0);
+            if (bytes_sent == -1)
+            {
+                perror("Error sending data to Naming-Server");
+                close(socket_ss_nm);
+                break;
             }
         }
 
@@ -730,27 +675,27 @@ void *clientConnectionThread(void *arg)
         else
         {
 
-            print_client_request_info(&request);
+            print_client_request_info_ss(&request);
 
             //* READ
             if (strcmp(request.command, "READ") == 0)
             {
                 //* Check if file exists
-                int file_exists = 0;
-                for (int i = 0; i < file_structure.numberOfFiles; i++)
-                {
-                    if (strcmp(request.file.name, file_structure.files[i].name) == 0)
-                    {
-                        file_exists = 1;
-                        break;
-                    }
-                }
+                // int file_exists = 0;
+                // for (int i = 0; i < file_structure.numberOfFiles; i++)
+                // {
+                //     if (strcmp(request.file.name, file_structure.files[i].name) == 0)
+                //     {
+                //         file_exists = 1;
+                //         break;
+                //     }
+                // }
 
-                if (file_exists == 0)
-                {
-                    printf("File does not exist.\n");
-                    continue;
-                }
+                // if (file_exists == 0)
+                // {
+                //     printf("File does not exist.\n");
+                //     continue;
+                // }
 
                 //* Send file to client
                 printf("Sending file to client...\n");
@@ -759,20 +704,20 @@ void *clientConnectionThread(void *arg)
             }
             else if (strcmp(request.command, "FILEINFO") == 0)
             {
-                int file_exists = 0;
-                for (int i = 0; i < file_structure.numberOfFiles; i++)
-                {
-                    if (strcmp(request.file.name, file_structure.files[i].name) == 0)
-                    {
-                        file_exists = 1;
-                        break;
-                    }
-                }
-                if (file_exists == 0)
-                {
-                    printf("File does not exist.\n");
-                    continue;
-                }
+                // int file_exists = 0;
+                // for (int i = 0; i < file_structure.numberOfFiles; i++)
+                // {
+                //     if (strcmp(request.file.name, file_structure.files[i].name) == 0)
+                //     {
+                //         file_exists = 1;
+                //         break;
+                //     }
+                // }
+                // if (file_exists == 0)
+                // {
+                //     printf("File does not exist.\n");
+                //     continue;
+                // }
 
                 //* Send file to client
                 printf("Sending file information to client...\n");
@@ -781,20 +726,20 @@ void *clientConnectionThread(void *arg)
             }
             else if (strcmp(request.command, "WRITE") == 0)
             {
-                int file_exists = 0;
-                for (int i = 0; i < file_structure.numberOfFiles; i++)
-                {
-                    if (strcmp(request.file.name, file_structure.files[i].name) == 0)
-                    {
-                        file_exists = 1;
-                        break;
-                    }
-                }
-                if (file_exists == 0)
-                {
-                    printf("File does not exist.\n");
-                    continue;
-                }
+                // int file_exists = 0;
+                // for (int i = 0; i < file_structure.numberOfFiles; i++)
+                // {
+                //     if (strcmp(request.file.name, file_structure.files[i].name) == 0)
+                //     {
+                //         file_exists = 1;
+                //         break;
+                //     }
+                // }
+                // if (file_exists == 0)
+                // {
+                //     printf("File does not exist.\n");
+                //     continue;
+                // }
 
                 //* Send file to client
                 printf("Starting Write Operation...\n");

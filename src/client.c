@@ -234,35 +234,6 @@ uint64_t generateTransactionId(uint32_t clientId)
     return transactionId;
 }
 
-void print_client_info()
-{
-    printf("Client ID: %d\n", client.clientID);
-    printf("Client Name: %s\n", client.clientName);
-    printf("Session ID: %d\n", client.sessionID);
-    printf("IP Address: %s\n", client.ipAddress);
-    printf("Client Port: %d\n", client.clientPort);
-    printf("Is Connected: %d\n", client.isConnected);
-}
-
-void print_client_request_info(struct ClientRequest client_request)
-{
-    printf("Client ID: %d\n", client_request.clientID);
-    printf("Transaction ID: %lu\n", client_request.transactionId);
-    printf("Operation: %s\n", client_request.command);
-    printf("Argument 1: %s\n", client_request.arguments[0]);
-    printf("Argument 2: %s\n", client_request.arguments[1]);
-}
-
-void print_response_info(struct Client_to_NM_response response)
-{
-    printf("Transaction ID: %lu\n", response.transactionId);
-    printf("Operation Performer: %d\n", response.operation_performer);
-    if (response.operation_performer == 2)
-    {
-        printf("Storage Server Port: %d\n", response.ss_port);
-        printf("Storage Server ID: %s\n", response.ss_ip);
-    }
-}
 // check if path is invalid
 int invalidPath(char *path)
 {
@@ -347,13 +318,21 @@ void inputParse(char *input)
             return;
         }
 
-        // if (invalidPath(filepath))
-        //     return;
+        char *type, *filename;
+        type = (char *)malloc(sizeof(char) * 16);
+        strcpy(type, filepath);
 
-        // custom_delete(filepath);
+        filename = strtok(NULL, " ");
+        if (filename == NULL)
+        {
+            errorDisplay(2);
+            return;
+        }
+
+        // custom_create(filepath);
         strcpy(clientRequest.command, "DELETE");
-        strcpy(clientRequest.arguments[0], filepath);
-        strcpy(clientRequest.arguments[1], "");
+        strcpy(clientRequest.arguments[0], type);
+        strcpy(clientRequest.arguments[1], filename);
     }
     else if (strcmp(command, "COPY") == 0)
     {
@@ -490,8 +469,6 @@ void read_parse_input()
     clientRequest.clientID = client.clientID;
 
     free(buffer);
-
-    print_client_request_info(clientRequest);
 
     return;
 }
@@ -656,6 +633,7 @@ void *naming_server_connection(void *arg)
         pthread_t operation_thread;
         //* Take input from user
         read_parse_input();
+        print_client_request_info(clientRequest);
         bytes_sent = send(socket_client, &clientRequest, sizeof(clientRequest), 0);
 
         if (bytes_sent == -1)
@@ -693,6 +671,20 @@ void *naming_server_connection(void *arg)
         if (response.operation_performer == 1)
         {
             print_client_request_info(clientRequest);
+            if (clientRequest.operation_status == 1)
+            {
+                if (strcmp(clientRequest.command, "CREATE"))
+                {
+                    if (strcmp(clientRequest.arguments[0], "FILE"))
+                    {
+                        printf("File created successfully\n");
+                    }
+                    else if (strcmp(clientRequest.arguments[0], "DIR"))
+                    {
+                        printf("Directory created successfully\n");
+                    }
+                }
+            }
             // pthread_create(&operation_thread, NULL, perform_operation_NM, (void *)&response);
             // pthread_join(operation_thread, NULL);
         }
@@ -765,7 +757,7 @@ int initiateClient()
         close(socket_client);
         printf("[-]Connection to Naming-Server lost.\n");
     }
-    print_client_info();
+    print_client_info(client);
     return 0;
 }
 

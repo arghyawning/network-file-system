@@ -77,29 +77,10 @@ void scan_dir(struct FileInfo **files, struct DirectoryInfo **directories, struc
     j = 0;
     fileCount = 0;
     dirCount = 0;
-    // struct FileInfo *files = NULL;
-    // struct DirectoryInfo *directories = NULL;
 
     // Read the current directory
     readDirectoryRecursive(".", files, directories);
 
-    // Print the file names
-    // printf("Files:\n");
-    // for (int i = 0; i < fileCount; i++)
-    // {
-    //     printf("File %d: %s\n", i + 1, files[i].name);
-    // }
-
-    // // Print the directory names
-    // printf("\nDirectories:\n");
-    // for (int i = 0; i < dirCount; i++)
-    // {
-    //     printf("Directory %d: %s\n", i + 1, directories[i].name);
-    // }
-
-    // Free allocated memory
-    // free(files);
-    // free(directories);
     fileInfo->numberOfFiles = fileCount;
     fileInfo->numberOfDirectories = dirCount;
 }

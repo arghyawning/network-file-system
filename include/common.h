@@ -134,6 +134,7 @@ struct Client_to_NM_response
     int ss_port;
     char ss_ip[16];
     struct FileInfo file;
+    int operation_status;
 };
 
 struct Client_to_SS_Request
@@ -148,10 +149,6 @@ struct NM_to_SS_Response
 {
     int operation_status;
 };
-
-// struct Client_to_SS_Response{
-
-// };
 
 struct Packet
 {
@@ -171,6 +168,47 @@ struct PacketWrite
     int datalength;
 };
 
+typedef struct file_found
+{
+    int ssid;                 // storage server id
+    struct FileInfo filepath; // path of the file
+} ff;
+
+typedef struct per_key_bucket
+{
+    int key;             // length of filename
+    ff files[MAX_FILES]; // files with same key
+    int num_files;       // number of files with this particular key
+} bucket;
+
+//* hashing.h
+void initialize_hash_table(bucket *fileshash);
+void removeHashEntry(char *filename, bucket *fileshash);
+void store_in_hash(struct CombinedFilesInfo *files, bucket *fileshash);
+void add_file_in_hash(char *filename, int ssid, bucket *fileshash);
+ff fileSearchWithHash(char *searchfilename, bucket *fileshash);
+void print_hash_table(bucket *fileshash);
+
+//* storage_server.h
 void scan_dir(struct FileInfo **files, struct DirectoryInfo **directories, struct NumberOfFiles *fileInfo);
+
+//* nm_utils.h
+void assign_ports_client(struct ClientInfo *client);
+void assign_ports_ss(struct StorageServerInfo *ss);
+int compareFilePath(const char *X, const struct StorageServerInfo *array, int number_of_ss);
+
+//* print_utils.h
+void print_response_info(struct Client_to_NM_response response);
+void print_ss_info(struct StorageServerInfo *ss, struct CombinedFilesInfo combinedFilesInfo);
+void print_client_info(struct ClientInfo client);
+void print_client_request_info(struct ClientRequest client_request);
+void print_client_request_info_ss(struct Client_to_SS_Request *request);
+
+//* data_utils.h
+struct CombinedFilesInfo deserializeData(char *buffer, struct StorageServerInfo *ss);
+void serializeData(struct StorageServerInfo *ss, int nFiles, int nDirectories, struct DirectoryInfo directories_all[], struct FileInfo files_all[], char *buffer);
+
+//* network_wrapper.h
+void close_socket(int socket);
 
 #endif
