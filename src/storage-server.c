@@ -13,6 +13,56 @@ int socket_server_heartbeat, socket_ss_heartbeat; //* Heartbeat Thread
 int socket_server_nm, socket_ss_nm;               //* NamingServerConnection Thread
 int socket_server_cc, socket_ss_cc;               //* ClientConnection Thread
 
+void removeDirectoryRecursive(const char *path)
+{
+    DIR *dir;
+    struct dirent *entry;
+
+    if ((dir = opendir(path)) == NULL)
+    {
+        perror("Error opening directory");
+        return;
+    }
+
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0)
+        {
+            char fullPath[MAX_PATH_SIZE];
+            snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name);
+
+            struct stat statbuf;
+            if (stat(fullPath, &statbuf) == -1)
+            {
+                perror("Error getting file/directory information");
+                closedir(dir);
+                return;
+            }
+
+            if (S_ISDIR(statbuf.st_mode))
+            {
+                removeDirectoryRecursive(fullPath); // Recursive call for subdirectory
+            }
+            else
+            {
+                if (remove(fullPath) != 0)
+                {
+                    perror("Error removing file");
+                    closedir(dir);
+                    return;
+                }
+            }
+        }
+    }
+
+    closedir(dir);
+
+    if (rmdir(path) != 0)
+    {
+        perror("Error removing directory");
+    }
+}
+
 void readFile(char *filepath, int socket)
 {
     FILE *fp = fopen(filepath, "r");
@@ -469,11 +519,11 @@ void *namingServerConnectionThread(void *arg)
         int bytes_received;
         int bytes_sent;
 
-        struct StorageServerHeartBeat ss_heartbeat;
+        struct ClientRequest request;
         while (1)
         {
 
-            bytes_received = recv(socket_ss_nm, &ss_heartbeat, sizeof(ss_heartbeat), 0);
+            bytes_received = recv(socket_ss_nm, &request, sizeof(request), 0);
 
             if (bytes_received == -1)
             {
@@ -500,9 +550,85 @@ void *namingServerConnectionThread(void *arg)
             }
             else
             {
-                printf("[+]%s.\n", ss_heartbeat.buffer);
 
-                bytes_sent = send(socket_ss_nm, &ss_heartbeat, sizeof(ss_heartbeat), 0);
+                if (strcmp(request.command, "CREATE") == 0)
+                {
+                    if (strcmp(request.arguments[0], "FILE") == 0)
+                    {
+                        printf("Creating file...\n");
+                        FILE *fp = fopen(request.arguments[1], "w");
+                        if (fp == NULL)
+                        {
+                            perror("[-] Error in creating file.");
+                            exit(1);
+                        }
+                        fclose(fp);
+                        printf("File created.\n");
+                    }
+                    else if (strcmp(request.arguments[0], "DIR") == 0)
+                    {
+                        printf("Creating directory...\n");
+                        if (mkdir(request.arguments[1], 0777) == -1)
+                        {
+                            perror("[-] Error in creating directory.");
+                            exit(1);
+                        }
+                        printf("Directory created.\n");
+                    }
+                }
+                else if (strcmp(request.command, "DELETE") == 0)
+                {
+                    if (strcmp(request.arguments[0], "FILE") == 0)
+                    {
+                        printf("Deleting file...\n");
+                        if (remove(request.arguments[1]) == 0)
+                        {
+                            printf("File '%s' removed successfully.\n", request.arguments[1]);
+                        }
+                        else
+                        {
+                            perror("Error removing file");
+                        }
+                        printf("File removed.\n");
+                    }
+                    else if (strcmp(request.arguments[0], "DIR") == 0)
+                    {
+                        printf("Deleting directory...\n");
+                        removeDirectoryRecursive(request.arguments[1]);
+                        printf("Directory created.\n");
+                    }
+                }
+                // else if (strcmp(request.command, "COPY") == 0)
+                // {
+                //     printf("Copying file...\n");
+                //     FILE *fptr1, *fptr2;
+                //     char c;
+                //     fptr1 = fopen(request.file.name, "r");
+                //     if (fptr1 == NULL)
+                //     {
+                //         printf("Cannot open file %s \n", request.file.name);
+                //         exit(0);
+                //     }
+                //     fptr2 = fopen(request.buffer, "w");
+                //     if (fptr2 == NULL)
+                //     {
+                //         printf("Cannot open file %s \n", request.buffer);
+                //         exit(0);
+                //     }
+                //     c = fgetc(fptr1);
+                //     while (c != EOF)
+                //     {
+                //         fputc(c, fptr2);
+                //         c = fgetc(fptr1);
+                //     }
+                //     printf("File copied successfully.\n");
+                //     fclose(fptr1);
+                //     fclose(fptr2);
+                // }
+
+                struct NM_to_SS_Response response;
+                response.operation_status = 1;
+                bytes_sent = send(socket_ss_nm, &response, sizeof(response), 0);
                 if (bytes_sent == -1)
                 {
                     perror("Error sending data to Naming-Server");

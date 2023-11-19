@@ -124,6 +124,7 @@ struct ClientRequest
     char command[MAX_COMMAND_NAME];
     char arguments[MAX_COMMAND_ARGUMENTS][MAX_BUFFER_SIZE];
     int clientID;
+    int operation_status;
 };
 
 struct Client_to_NM_response
@@ -141,6 +142,11 @@ struct Client_to_SS_Request
     char command[MAX_COMMAND_NAME];
     struct FileInfo file;
     int write_type;
+};
+
+struct NM_to_SS_Response
+{
+    int operation_status;
 };
 
 // struct Client_to_SS_Response{
@@ -162,6 +168,7 @@ struct PacketWrite
     int packetNumber; // Packet number for tracking
     int write_type;   // 1 for overwrite, 2 for append
     char data[MAX_CHUNK_SIZE];
+    int datalength;
 };
 
 void scan_dir(struct FileInfo **files, struct DirectoryInfo **directories, struct NumberOfFiles *fileInfo);

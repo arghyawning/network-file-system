@@ -144,10 +144,13 @@ void send_data_in_chunks(const char *data, int data_length, int sockfd)
 
         // Determine the size to copy based on remaining data
         int size_to_copy = (packet.isEnd) ? (data_length - bytes_sent) : MAX_CHUNK_SIZE;
+        packet.datalength = size_to_copy;
 
         // Copy the data into the packet
         strncpy(packet.data, data + bytes_sent, size_to_copy);
-        // packet.data[size_to_copy] = '\0'; // Null-terminate the data
+        //! DO NOT DO THIS
+        //! packet.data[packet.datalength] = '\0';
+        packet.data[size_to_copy] = '\0'; // Null-terminate the data
         // strncpy(packet.data, data + bytes_sent, MAX_CHUNK_SIZE);
 
         // Send the packet to the server
@@ -389,10 +392,21 @@ void inputParse(char *input)
             return;
         }
 
+        char *type, *filename;
+        type = (char *)malloc(sizeof(char) * 16);
+        strcpy(type, filepath);
+
+        filename = strtok(NULL, " ");
+        if (filename == NULL)
+        {
+            errorDisplay(2);
+            return;
+        }
+
         // custom_create(filepath);
         strcpy(clientRequest.command, "CREATE");
-        strcpy(clientRequest.arguments[0], filepath);
-        strcpy(clientRequest.arguments[1], "");
+        strcpy(clientRequest.arguments[0], type);
+        strcpy(clientRequest.arguments[1], filename);
     }
     else if (strcmp(command, "FILEINFO") == 0)
     {
@@ -544,6 +558,8 @@ void *perform_operation_ss(void *arg)
         request_ss.write_type = choice;
     }
 
+    print_client_request_info(clientRequest);
+
     bytes_sent = send(socket_client, &request_ss, sizeof(request_ss), 0);
 
     if (bytes_sent == -1)
@@ -676,8 +692,9 @@ void *naming_server_connection(void *arg)
 
         if (response.operation_performer == 1)
         {
-            pthread_create(&operation_thread, NULL, perform_operation_NM, (void *)&response);
-            pthread_join(operation_thread, NULL);
+            print_client_request_info(clientRequest);
+            // pthread_create(&operation_thread, NULL, perform_operation_NM, (void *)&response);
+            // pthread_join(operation_thread, NULL);
         }
         else if (response.operation_performer == 2)
         {

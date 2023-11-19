@@ -293,7 +293,7 @@ void print_client_info(struct ClientInfo client)
 void print_client_request_info(struct ClientRequest client_request)
 {
     printf("Client ID: %d\n", client_request.clientID);
-    printf("Transaction ID: %llu\n", client_request.transactionId);
+    printf("Transaction ID: %lu\n", client_request.transactionId);
     printf("Operation: %s\n", client_request.command);
     printf("Argument 1: %s\n", client_request.arguments[0]);
     printf("Argument 2: %s\n", client_request.arguments[1]);
@@ -362,6 +362,80 @@ struct CombinedFilesInfo deserializeData(char *buffer, struct StorageServerInfo 
 
 //     return NULL;
 // }
+
+void *ss_connection(void *arg)
+{
+    struct ClientRequest *request = (struct ClientRequest *)arg;
+    int ss_id = 0;
+    printf("[+]Storage-Server %d thread created.\n", ss_id + 1);
+    int socket_ss;
+    struct sockaddr_in addr;
+    socklen_t size_address;
+
+    socket_ss = socket(AF_INET, SOCK_STREAM, 0);
+    if (socket_ss < 0)
+    {
+        perror("[-]Socket error");
+        close(socket_ss);
+        exit(1);
+    }
+
+    printf("[+]Storage-Server %d socket created.\n", ss_id + 1);
+
+    memset(&addr, '\0', sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(storageServers[ss_id].storageServerPort);
+    addr.sin_addr.s_addr = inet_addr(storageServers[ss_id].ipAddress);
+
+    size_address = sizeof(addr);
+
+    int connection_tries = 0;
+    while (1)
+    {
+        if (connect(socket_ss, (struct sockaddr *)&addr, size_address) == 0)
+        {
+            printf("[+]Connected to Storage-Server %d.\n", ss_id + 1);
+            break;
+        }
+        else
+        {
+            printf("[-]Connection attempt %d/%d to Storage-Server %d on PORT %d failed. Trying again...\n", connection_tries + 1, MAX_CONNECTION_TRIES, ss_id + 1, storageServers[ss_id].storageServerPort);
+            connection_tries++;
+            sleep(RETRY_INTERVAL);
+        }
+
+        if (connection_tries == MAX_CONNECTION_TRIES)
+        {
+            printf("[-]Could not connect to Storage-Server %d. Stopping further connection attempts\n", ss_id + 1);
+            close(socket_ss);
+            pthread_exit(NULL);
+        }
+    }
+
+    int bytes_sent, bytes_received;
+    bytes_sent = send(socket_ss, &request, sizeof(request), 0);
+    struct NM_to_SS_Response response;
+    if (bytes_sent == -1)
+    {
+        perror("Error sending heartbeat to storage server");
+        close(socket_ss);
+        printf("[-]Connection to Storage-Server %d lost.\n", ss_id + 1);
+    }
+    bytes_received = recv(socket_ss, &response, sizeof(response), 0);
+    if (bytes_received == -1)
+    {
+        perror("Error receiving heartbeat from storage server");
+        close(socket_ss);
+        printf("[-]Connection to Storage-Server %d lost.\n", ss_id + 1);
+    }
+    else if (bytes_received == 0)
+    {
+        printf("Connection closed by the Storage-Server.\n");
+        close(socket_ss);
+        printf("[-]Connection to Storage-Server %d lost.\n", ss_id + 1);
+    }
+    pthread_exit(NULL);
+}
 
 void *client_connection(void *arg)
 {
@@ -484,6 +558,11 @@ void *client_connection(void *arg)
                 }
 
                 print_response_info(response);
+
+                // pthread_t ss_operation;
+
+                // pthread_create(&ss_operation, NULL, ss_connection, (void *)&client_request);
+                // pthread_join(ss_operation, NULL);
 
                 bytes_sent = send(socket_client, &response, sizeof(response), 0);
                 if (bytes_sent == -1)
