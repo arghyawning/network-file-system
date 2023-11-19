@@ -468,6 +468,7 @@ void *namingServerConnectionThread(void *arg)
         int bytes_sent;
 
         struct ClientRequest request;
+        struct NM_to_SS_Response response;
 
         bytes_received = recv(socket_ss_nm, &request, sizeof(request), 0);
 
@@ -514,7 +515,7 @@ void *namingServerConnectionThread(void *arg)
                 else if (strcmp(request.arguments[0], "DIR") == 0)
                 {
                     printf("Creating directory...\n");
-                    if (mkdir(request.arguments[1], 0777) == -1)
+                    if (createDirectory(request.arguments[1], &response) == 0)
                     {
                         perror("[-] Error in creating directory.");
                         exit(1);
@@ -572,7 +573,6 @@ void *namingServerConnectionThread(void *arg)
             //     fclose(fptr2);
             // }
 
-            struct NM_to_SS_Response response;
             response.operation_status = 1;
             bytes_sent = send(socket_ss_nm, &response, sizeof(response), 0);
             if (bytes_sent == -1)

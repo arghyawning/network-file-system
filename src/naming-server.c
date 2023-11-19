@@ -26,6 +26,7 @@ struct ClientInfo clients[MAX_CLIENTS];
 
 //* Hash table for file search
 bucket fileshash[MAX_PATH_SIZE + 1];
+bucket_dir dirhash[MAX_PATH_SIZE + 1];
 
 //* Ports for SS and Client
 int PORTS_SS[MAX_SS * MAX_PORTS_PER_SS];
@@ -133,7 +134,7 @@ void add_file_directory(char *filename, int type, int ssid)
         strcpy(combinedFilesInfoAll[ssid].files[combinedFilesInfoAll[ssid].numberOfFiles].name, filename);
         combinedFilesInfoAll->numberOfFiles++;
         storageServers[ssid].numberOfFiles++;
-        
+
         add_file_in_hash(filename, ssid, fileshash);
     }
     else if (type == 2)
@@ -143,6 +144,8 @@ void add_file_directory(char *filename, int type, int ssid)
         strcpy(combinedFilesInfoAll[ssid].directories[combinedFilesInfoAll[ssid].numberOfDirectories].name, filename);
         combinedFilesInfoAll->numberOfDirectories++;
         storageServers[ssid].numberOfDirectories++;
+
+        add_dir_in_hash(filename, ssid, dirhash);
     }
     else
     {
@@ -200,8 +203,6 @@ void remove_file_directory(char *filename, int type, int ssid)
         printf("[-]Invalid type\n");
     }
 }
-
-//* Deserialize the char buffer into StorageServerInfo, DirectoryInfo and FileInfo
 
 // void *checkRedundantServers(void *arg)
 // {
@@ -310,7 +311,9 @@ void *ss_connection(void *arg)
 
     int bytes_sent, bytes_received;
     bytes_sent = send(socket_ss, &temp, sizeof(temp), 0);
+
     printf("Request sent to storage server. Waiting for response...\n");
+
     struct NM_to_SS_Response response;
     if (bytes_sent == -1)
     {
@@ -346,7 +349,11 @@ void *ss_connection(void *arg)
             }
             else if (strcmp(request->arguments[0], "DIR") == 0)
             {
-                add_file_directory(request->arguments[1], 2, ss_id);
+                for (int i = 0; i < response.new_dir_count; i++)
+                {
+                    add_file_directory(response.dir[i].name, 2, ss_id);
+                }
+                // add_file_directory(request->arguments[1], 2, ss_id);
             }
         }
         else if (strcmp(request->command, "DELETE") == 0)
@@ -361,8 +368,9 @@ void *ss_connection(void *arg)
             }
             print_ss_info(&storageServers[ss_id], combinedFilesInfoAll[ss_id]);
         }
-        print_hash_table(fileshash);
 
+        // print_hash_table_files(fileshash);
+        print_hash_table_directories(dirhash);
         // else if(strcmp(request->command, "COPY") == 0)
         // {
         //     if (strcmp(request->arguments[0], "FILE") == 0)
@@ -800,8 +808,8 @@ void *first_connection_ss(void *arg)
                 combinedFilesInfoAll[number_of_ss] = combinedFilesInfo;
                 storageServers[number_of_ss] = ss;
 
-                store_in_hash(&combinedFilesInfoAll[number_of_ss], fileshash);
-
+                store_in_hash_file(&combinedFilesInfoAll[number_of_ss], fileshash);
+                store_in_hash_dir(&combinedFilesInfoAll[number_of_ss], dirhash);
                 //* send updated storage-server
                 bytes_sent = send(socket_ss, &ss, sizeof(ss), 0);
                 if (bytes_sent == -1)
@@ -961,7 +969,7 @@ int main()
 {
     number_of_connected_ss = 0;
     pthread_t first_connection_client_thread, first_connection_ss_thread;
-    initialize_hash_table(fileshash);
+    initialize_hash_table(fileshash, dirhash);
     //* thread for listening to first connection from storage server
     pthread_create(&first_connection_ss_thread, NULL, first_connection_ss, NULL);
     pthread_create(&first_connection_client_thread, NULL, first_connection_client, NULL);

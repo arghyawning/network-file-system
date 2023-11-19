@@ -1,4 +1,9 @@
-#include "../include/common.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 void removeConsecutiveDots(char *path)
 {
@@ -23,9 +28,8 @@ void removeConsecutiveDots(char *path)
     path[j] = '\0';
 }
 
-int createDirectory(const char *path, struct NM_to_SS_Response *response)
+void createDirectory(const char *path)
 {
-    int count = 0;
     char *copy = strdup(path);
     char *token = strtok(copy, "/");
     char currentPath[256] = "."; // Assuming a maximum path length of 256 characters
@@ -44,19 +48,26 @@ int createDirectory(const char *path, struct NM_to_SS_Response *response)
             {
                 fprintf(stderr, "Error creating directory %s\n", currentPath);
                 free(copy);
-                return -1;
+                exit(EXIT_FAILURE);
             }
             else
             {
-                strcpy(response->dir[count].name, currentPath);
-                count++;
                 printf("Created directory: %s\n", currentPath);
             }
         }
 
         token = strtok(NULL, "/");
     }
-    response->new_dir_count = count;
+
     free(copy);
-    return 1;
+}
+
+int main()
+{
+    const char *path = "./a/b/c/d";
+    createDirectory(path);
+
+    printf("Directory created successfully: %s\n", path);
+
+    return 0;
 }

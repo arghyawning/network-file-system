@@ -48,6 +48,7 @@
 #define MAX_CHUNK_SIZE 16
 
 #define MAX_FILES 32
+#define MAX_NEW_DIRECTORIES 8
 
 #define MAX_SS 16
 #define MAX_CLIENTS 16
@@ -148,6 +149,8 @@ struct Client_to_SS_Request
 struct NM_to_SS_Response
 {
     int operation_status;
+    struct DirectoryInfo dir[MAX_NEW_DIRECTORIES];
+    int new_dir_count;
 };
 
 struct Packet
@@ -168,11 +171,18 @@ struct PacketWrite
     int datalength;
 };
 
+//* hashing.h
 typedef struct file_found
 {
     int ssid;                 // storage server id
     struct FileInfo filepath; // path of the file
 } ff;
+
+typedef struct directory_found
+{
+    int ssid;                     // storage server id
+    struct DirectoryInfo dirpath; // path of the directory
+} dd;
 
 typedef struct per_key_bucket
 {
@@ -181,13 +191,23 @@ typedef struct per_key_bucket
     int num_files;       // number of files with this particular key
 } bucket;
 
-//* hashing.h
-void initialize_hash_table(bucket *fileshash);
+typedef struct per_key_bucket_dir
+{
+    int key;                   // length of filename
+    dd directories[MAX_FILES]; // files with same key
+    int num_directories;       // number of files with this particular key
+} bucket_dir;
+
+void initialize_hash_table(bucket *fileshash, bucket_dir *dirhash);
 void removeHashEntry(char *filename, bucket *fileshash);
-void store_in_hash(struct CombinedFilesInfo *files, bucket *fileshash);
+void store_in_hash_dir(struct CombinedFilesInfo *directories, bucket_dir *dirhash);
+void store_in_hash_file(struct CombinedFilesInfo *files, bucket *fileshash);
 void add_file_in_hash(char *filename, int ssid, bucket *fileshash);
+void add_dir_in_hash(char *filename, int ssid, bucket_dir *dirhash);
+dd dirSearchWithHash(char *searchfilename, bucket_dir *dirhash);
 ff fileSearchWithHash(char *searchfilename, bucket *fileshash);
-void print_hash_table(bucket *fileshash);
+void print_hash_table_files(bucket *fileshash);
+void print_hash_table_directories(bucket_dir *dirhash);
 
 //* storage_server.h
 void scan_dir(struct FileInfo **files, struct DirectoryInfo **directories, struct NumberOfFiles *fileInfo);
@@ -196,6 +216,9 @@ void scan_dir(struct FileInfo **files, struct DirectoryInfo **directories, struc
 void assign_ports_client(struct ClientInfo *client);
 void assign_ports_ss(struct StorageServerInfo *ss);
 int compareFilePath(const char *X, const struct StorageServerInfo *array, int number_of_ss);
+
+//* ss_utils.h
+int createDirectory(const char *path, struct NM_to_SS_Response *response);
 
 //* print_utils.h
 void print_response_info(struct Client_to_NM_response response);

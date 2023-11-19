@@ -1,5 +1,6 @@
 #include "../include/common.h"
 
+//* Deserialize the char buffer into StorageServerInfo, DirectoryInfo and FileInfo
 struct CombinedFilesInfo deserializeData(char *buffer, struct StorageServerInfo *ss)
 {
     int nFiles, nDirectories;

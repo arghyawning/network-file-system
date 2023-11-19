@@ -1,12 +1,34 @@
 #include "../include/common.h"
 
-void initialize_hash_table(bucket *fileshash)
+void initialize_hash_table(bucket *fileshash, bucket_dir *dirhash)
 {
     for (int i = 0; i < MAX_PATH_SIZE + 1; i++)
     {
         fileshash[i].key = i;
+        dirhash[i].key = i;
+        dirhash[i].num_directories = 0;
         fileshash[i].num_files = 0;
     }
+}
+
+void add_dir_in_hash(char *filename, int ssid, bucket_dir *dirhash)
+{
+
+    char *filename_updated = strrchr(filename, '/') + 1;
+
+    int key = strlen(filename_updated);
+    if (dirhash[key].num_directories == MAX_FILES)
+    {
+        printf("[-]Hash table bucket full. Cannot store more files.\n");
+        return;
+    }
+    dd temp;
+    temp.ssid = ssid;
+    strcpy(temp.dirpath.name, filename);
+    dirhash[key].directories[dirhash[key].num_directories] = temp;
+    // printf("before: number of files %d for key %d\n", dirhash[key].num_directories, key);
+    dirhash[key].num_directories++;
+    // printf("after: number of files %d for key %d\n", dirhash[key].num_directories, key);
 }
 
 void add_file_in_hash(char *filename, int ssid, bucket *fileshash)
@@ -24,12 +46,30 @@ void add_file_in_hash(char *filename, int ssid, bucket *fileshash)
     temp.ssid = ssid;
     strcpy(temp.filepath.name, filename);
     fileshash[key].files[fileshash[key].num_files] = temp;
-    printf("before: number of files %d for key %d\n", fileshash[key].num_files, key);
+    // printf("before: number of files %d for key %d\n", fileshash[key].num_files, key);
     fileshash[key].num_files++;
-    printf("after: number of files %d for key %d\n", fileshash[key].num_files, key);
+    // printf("after: number of files %d for key %d\n", fileshash[key].num_files, key);
 }
 
-void store_in_hash(struct CombinedFilesInfo *files, bucket *fileshash)
+void store_in_hash_dir(struct CombinedFilesInfo *directories, bucket_dir *dirhash)
+{
+    for (int i = 0; i < directories->numberOfDirectories; i++)
+    {
+        char *filename = strrchr(directories->directories[i].name, '/') + 1;
+
+        int key = strlen(filename);
+        if (dirhash[key].num_directories == MAX_FILES)
+        {
+            printf("[-]Hash table bucket full. Cannot store more files.\n");
+            continue;
+        }
+
+        dirhash[key].directories[dirhash[key].num_directories] = (dd){directories->storageServerID, directories->directories[i]};
+        dirhash[key].num_directories++;
+    }
+}
+
+void store_in_hash_file(struct CombinedFilesInfo *files, bucket *fileshash)
 {
     for (int i = 0; i < files->numberOfFiles; i++)
     {
@@ -45,6 +85,37 @@ void store_in_hash(struct CombinedFilesInfo *files, bucket *fileshash)
         fileshash[key].files[fileshash[key].num_files] = (ff){files->storageServerID, files->files[i]};
         fileshash[key].num_files++;
     }
+}
+
+dd dirSearchWithHash(char *searchfilename, bucket_dir *dirhash)
+{
+    int key = strlen(searchfilename);
+    bucket_dir b = dirhash[key];
+
+    printf("Number of directories with key %d: %d\n", key, b.num_directories);
+
+    for (int i = 0; i < b.num_directories; i++)
+    {
+        // retrieving file name from path
+        printf("Before: File %d: %s\n", i + 1, b.directories[i].dirpath.name);
+        char *filename = strrchr(b.directories[i].dirpath.name, '/') + 1;
+        printf("After: File %d: %s\n", i + 1, filename);
+        if (filename == NULL)
+        {
+            strcpy(filename, b.directories[i].dirpath.name);
+        }
+
+        // comparing file name with searchfilename
+        if (strcmp(filename, searchfilename) == 0)
+        {
+            return b.directories[i];
+        }
+    }
+
+    dd notfound;
+    notfound.ssid = -1;
+    notfound.dirpath.name[0] = '\0';
+    return notfound;
 }
 
 ff fileSearchWithHash(char *searchfilename, bucket *fileshash)
@@ -117,7 +188,7 @@ void removeHashEntry(char *filename, bucket *fileshash)
     }
 }
 
-void print_hash_table(bucket *fileshash)
+void print_hash_table_files(bucket *fileshash)
 {
     for (int i = 0; i < MAX_PATH_SIZE + 1; i++)
     {
@@ -127,6 +198,20 @@ void print_hash_table(bucket *fileshash)
         for (int j = 0; j < b.num_files; j++)
         {
             printf("File %d: %s\n", j + 1, b.files[j].filepath.name);
+        }
+    }
+}
+
+void print_hash_table_directories(bucket_dir *dirhash)
+{
+    for (int i = 0; i < MAX_PATH_SIZE + 1; i++)
+    {
+        bucket_dir b = dirhash[i];
+        printf("Key: %d\n", b.key);
+        printf("Number of directories: %d\n", b.num_directories);
+        for (int j = 0; j < b.num_directories; j++)
+        {
+            printf("Directory %d: %s\n", j + 1, b.directories[j].dirpath.name);
         }
     }
 }
