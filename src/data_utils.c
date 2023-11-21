@@ -54,6 +54,7 @@ void serializeData(struct StorageServerInfo *ss, int nFiles, int nDirectories, s
     // printf("Buffer: %s\n", buffer);
 }
 
+//* strings operations
 char *get_substring_before_last_slash(const char *path) {
     const char *last_slash = strrchr(path, '/');
 

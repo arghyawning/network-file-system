@@ -32,10 +32,36 @@ bucket_dir dirhash[MAX_PATH_SIZE + 1];
 int PORTS_SS[MAX_SS * MAX_PORTS_PER_SS];
 int PORTS_CLIENTS[MAX_CLIENTS * MAX_PORTS_PER_SS];
 
+//* Loggin file
+char logFilePath[MAX_PATH_SIZE] = ".nm_log";
+
+//* Search Tree
+struct DirTree dirTree;
+
+void printTree(struct DirTree *dirTree, int level)
+{
+    if (dirTree == NULL)
+        return;
+
+    for (int i = 0; i < level; i++)
+        printf("\t");
+
+    printf("%s (ssid %d)\n", dirTree->dirinfo.name, dirTree->ssid);
+
+    for (int i = 0; i < dirTree->numberOfDirectories; i++)
+    {
+        printTree(&dirTree->directories[i], level + 1);
+    }
+}
+
 //* function to assign two random storage-servers for redundancy except the main storage-server. The storage-server should be active
 void makeRedundantServers(struct StorageServerInfo *mainServer)
 {
-    printf("\n\nPreparing to assign Redundant-Servers for Storage-Server %d...\n", mainServer->storageServerID);
+    // Log the message
+    char temp[MAX_BUFFER_SIZE];
+    sprintf(temp, "Preparing to assign Redundant-Servers for Storage-Server %d...\n", mainServer->storageServerID);
+    logMessage(logFilePath, temp);
+    printf(temp);
     // Seed the random number generator with the current time
     srand((unsigned int)time(NULL));
     int numRedundantServers = MAX_REDUNDANT_SS;
@@ -130,9 +156,13 @@ void prepare_for_copy(struct ClientRequest *request)
     //* source_path will be of the form "./a/b/c.txt" and destination path will be of the form "./c/d"
     //* We need to extract the file name from the source path and append it to the destination path
 
-    char *source_path = strrchr(request->arguments[0], '/') + 1;
+    // char *source_path = strrchr(request->arguments[0], '/') + 1;
+    char *source_path = request->arguments[0];
     char *destination_path = get_substring_before_last_slash(request->arguments[1]);
-    destination_path = strrchr(destination_path, '/') + 1;
+    // destination_path = strrchr(destination_path, '/') + 1;
+
+    // printf("Modified Source path: %s\n", source_path);
+    // printf("Modified Destination path: %s\n", destination_path);
 
     int source_storage_ss = fileSearchWithHash(source_path, fileshash).ssid;
     int destination_ss = dirSearchWithHash(destination_path, dirhash).ssid;
@@ -184,6 +214,9 @@ void copy_file_between_ss(struct ClientRequest request)
         exit(EXIT_FAILURE);
     }
 
+    char tempLog[MAX_BUFFER_SIZE];
+    sprintf(tempLog, "Connected to storage server %d for copying.\n", copyInfo.ss_source_id);
+    logMessage(logFilePath, tempLog);
     printf("Connected to source storage server %d for copying. \n", copyInfo.ss_source_id);
 
     // Repeat the above steps for storage server 2 and main server
@@ -193,8 +226,9 @@ void copy_file_between_ss(struct ClientRequest request)
     if (storage_server2 == -1)
     {
         perror("Error creating socket for storage server 2");
+        logMessage(logFilePath, "Error creating socket for storage server 2");
         close(storage_server1);
-        exit(EXIT_FAILURE);
+        return;
     }
 
     memset(&storage2_addr, 0, sizeof(storage2_addr));
@@ -205,12 +239,15 @@ void copy_file_between_ss(struct ClientRequest request)
     if (connect(storage_server2, (struct sockaddr *)&storage2_addr, sizeof(storage2_addr)) == -1)
     {
         perror("Error connecting to storage server 2");
+        logMessage(logFilePath, "Error connecting to storage server 2");
         close(storage_server1);
         close(storage_server2);
-        exit(EXIT_FAILURE);
+        return;
     }
 
+    sprintf(tempLog, "Connected to storage server %d for copying.\n", copyInfo.ss_destination_id);
     printf("Connected to destination storage server %d for copying. \n", copyInfo.ss_destination_id);
+    logMessage(logFilePath, tempLog);
 
     int bytes_sent, bytes_received;
     struct NM_to_SS_Response source_response, destination_response;
@@ -218,28 +255,32 @@ void copy_file_between_ss(struct ClientRequest request)
     if (bytes_sent == -1)
     {
         perror("Error sending request to storage server 1");
+        logMessage(logFilePath, "Error sending request to storage server 1");
         close(storage_server1);
         close(storage_server2);
-        exit(EXIT_FAILURE);
+        return;
     }
     bytes_received = recv(storage_server1, &source_response, sizeof(struct NM_to_SS_Response), 0);
     if (bytes_received == -1)
     {
         perror("Error receiving response from storage server 1");
+        logMessage(logFilePath, "Error receiving response from storage server 1");
         close(storage_server1);
         close(storage_server2);
-        exit(EXIT_FAILURE);
     }
     if (source_response.source_ss_confirmation == 1)
     {
-        printf("Source storage server %d confirmed the operation.\nChecking For storage server %d\n", copyInfo.ss_source_id, copyInfo.ss_destination_id);
+        sprintf(tempLog, "Source storage server %d confirmed the operation.\nChecking For storage server %d\n", copyInfo.ss_source_id, copyInfo.ss_destination_id);
+        logMessage(logFilePath, tempLog);
+        printf(tempLog);
     }
     else
     {
-        printf("Source storage server %d denied the operation.\n", copyInfo.ss_source_id);
+        sprintf(tempLog, "Source storage server %d denied the operation.\n", copyInfo.ss_source_id);
+        printf(tempLog);
         close(storage_server1);
         close(storage_server2);
-        exit(EXIT_FAILURE);
+        return;
     }
 
     bytes_sent = send(storage_server2, &request, sizeof(struct ClientRequest), 0);
@@ -269,63 +310,6 @@ void copy_file_between_ss(struct ClientRequest request)
         close(storage_server2);
         exit(EXIT_FAILURE);
     }
-
-    // Create socket for main server
-    // main_server = socket(AF_INET, SOCK_STREAM, 0);
-    // if (main_server == -1)
-    // {
-    //     perror("Error creating socket for main server");
-    //     close(storage_server1);
-    //     close(storage_server2);
-    //     exit(EXIT_FAILURE);
-    // }
-
-    // memset(&main_addr, 0, sizeof(main_addr));
-    // main_addr.sin_family = AF_INET;
-    // main_addr.sin_addr.s_addr = INADDR_ANY;
-    // main_addr.sin_port = htons(12347); // Replace with the actual port number
-
-    // // Bind the socket to the address
-    // if (bind(main_server, (struct sockaddr *)&main_addr, sizeof(main_addr)) == -1)
-    // {
-    //     perror("Error binding main server socket");
-    //     close(storage_server1);
-    //     close(storage_server2);
-    //     close(main_server);
-    //     exit(EXIT_FAILURE);
-    // }
-
-    // // Listen for incoming connections
-    // if (listen(main_server, 10) == -1)
-    // {
-    //     perror("Error listening for connections");
-    //     close(storage_server1);
-    //     close(storage_server2);
-    //     close(main_server);
-    //     exit(EXIT_FAILURE);
-    // }
-
-    // // Accept connection from storage server 1
-    // int storage1_connection = accept(main_server, NULL, NULL);
-    // if (storage1_connection == -1)
-    // {
-    //     perror("Error accepting connection from storage server 1");
-    //     close(storage_server1);
-    //     close(storage_server2);
-    //     close(main_server);
-    //     exit(EXIT_FAILURE);
-    // }
-
-    // // Accept connection from storage server 2
-    // int storage2_connection = accept(main_server, NULL, NULL);
-    // if (storage2_connection == -1)
-    // {
-    //     perror("Error accepting connection from storage server 2");
-    //     close(storage_server1);
-    //     close(storage_server2);
-    //     close(main_server);
-    //     exit(EXIT_FAILURE);
-    // }
 
     // starting the operation
     source_response.start_operation = 1;
@@ -387,7 +371,9 @@ void copy_file_between_ss(struct ClientRequest request)
             }
         }
     }
+
     printf("NM : File copied successfully\n");
+    logMessage(logFilePath, "File copied successfully\n");
     // Close sockets
     close(storage_server1);
     close(storage_server2);
@@ -400,9 +386,19 @@ void add_file_directory(char *filename, int type, int ssid)
     if (type == 1)
     {
         // realloc combinedFileinfo[ssid].files and add the above filename
-        combinedFilesInfoAll[ssid].files = (struct FileInfo *)realloc(combinedFilesInfoAll[ssid].files, sizeof(struct FileInfo) * (combinedFilesInfoAll[ssid].numberOfFiles + 1));
+        if (combinedFilesInfoAll[ssid].files == NULL)
+        {
+            printf("I am null\n\n");
+            combinedFilesInfoAll[ssid].files = (struct FileInfo *)malloc(sizeof(struct FileInfo));
+        }
+        else
+        {
+            printf("I am not null\n\n");
+            combinedFilesInfoAll[ssid].files = (struct FileInfo *)realloc(combinedFilesInfoAll[ssid].files, sizeof(struct FileInfo) * (combinedFilesInfoAll[ssid].numberOfFiles + 1));
+        }
         strcpy(combinedFilesInfoAll[ssid].files[combinedFilesInfoAll[ssid].numberOfFiles].name, filename);
-        combinedFilesInfoAll->numberOfFiles++;
+        printf("Added file %s to storage server %d\n", combinedFilesInfoAll[ssid].files[combinedFilesInfoAll[ssid].numberOfFiles].name, ssid);
+        combinedFilesInfoAll[ssid].numberOfFiles++;
         storageServers[ssid].numberOfFiles++;
 
         add_file_in_hash(filename, ssid, fileshash);
@@ -410,9 +406,16 @@ void add_file_directory(char *filename, int type, int ssid)
     else if (type == 2)
     {
         // realloc combinedFileinfo[ssid].directories and add the above filename
-        combinedFilesInfoAll[ssid].directories = (struct DirectoryInfo *)realloc(combinedFilesInfoAll[ssid].directories, sizeof(struct DirectoryInfo) * (combinedFilesInfoAll[ssid].numberOfDirectories + 1));
+        if (combinedFilesInfoAll[ssid].directories == NULL)
+        {
+            combinedFilesInfoAll[ssid].directories = (struct DirectoryInfo *)malloc(sizeof(struct DirectoryInfo));
+        }
+        else
+        {
+            combinedFilesInfoAll[ssid].directories = (struct DirectoryInfo *)realloc(combinedFilesInfoAll[ssid].directories, sizeof(struct DirectoryInfo) * (combinedFilesInfoAll[ssid].numberOfDirectories + 1));
+        }
         strcpy(combinedFilesInfoAll[ssid].directories[combinedFilesInfoAll[ssid].numberOfDirectories].name, filename);
-        combinedFilesInfoAll->numberOfDirectories++;
+        combinedFilesInfoAll[ssid].numberOfDirectories++;
         storageServers[ssid].numberOfDirectories++;
 
         add_dir_in_hash(filename, ssid, dirhash);
@@ -447,26 +450,90 @@ void remove_file_directory(char *filename, int type, int ssid)
             printf("File not found in the array.\n");
             return;
         }
-
-        // Shift elements to the left to fill the gap
-        for (int i = indexToRemove; i < storageServers[ssid].numberOfFiles - 1; i++)
+        else
         {
-            strcpy(combinedFilesInfoAll[ssid].files[i].name, combinedFilesInfoAll[ssid].files[i + 1].name);
+            printf("File found in the array index %d.\n", indexToRemove);
+            printf("File name : %s\n", combinedFilesInfoAll[ssid].files[indexToRemove].name);
         }
 
-        combinedFilesInfoAll[ssid].files = (struct FileInfo *)realloc(combinedFilesInfoAll[ssid].files, sizeof(struct FileInfo) * (combinedFilesInfoAll[ssid].numberOfFiles - 1));
-        combinedFilesInfoAll->numberOfFiles--;
-        storageServers[ssid].numberOfFiles--;
+        // Shift elements to the left to fill the gap
+        if (combinedFilesInfoAll[ssid].numberOfFiles == 1)
+        {
+            free(combinedFilesInfoAll[ssid].files);
+            combinedFilesInfoAll[ssid].files = NULL;
+        }
+        else
+        {
 
-        removeHashEntry(filename, fileshash);
+            for (int i = indexToRemove; i < storageServers[ssid].numberOfFiles - 1; i++)
+            {
+                printf("BEFORE: File name : %s\n", combinedFilesInfoAll[ssid].files[i].name);
+                strcpy(combinedFilesInfoAll[ssid].files[i].name, combinedFilesInfoAll[ssid].files[i + 1].name);
+                printf("AFTER: File name : %s\n", combinedFilesInfoAll[ssid].files[i].name);
+            }
+        }
+
+        combinedFilesInfoAll[ssid].numberOfFiles--;
+        storageServers[ssid].numberOfFiles--;
+        if (combinedFilesInfoAll[ssid].numberOfFiles == 0)
+        {
+            combinedFilesInfoAll[ssid].files = (struct FileInfo *)realloc(combinedFilesInfoAll[ssid].files, sizeof(struct FileInfo) * (combinedFilesInfoAll[ssid].numberOfFiles));
+        }
+
+        removeHashEntryFile(filename, fileshash);
     }
     else if (type == 2)
     {
+
+        dd temp = dirSearchWithHash(filename, dirhash);
+        printf("Directory found on storage server %d\n", temp.ssid);
+        printf("Directory path : %s\n", temp.dirpath.name);
+
+        int indexToRemove = -1;
+        for (int i = 0; i < storageServers[ssid].numberOfDirectories; i++)
+        {
+            if (strcmp(combinedFilesInfoAll[ssid].directories[i].name, temp.dirpath.name) == 0)
+            {
+                indexToRemove = i;
+                break;
+            }
+        }
+
+        if (indexToRemove == -1)
+        {
+            printf("Directory not found in the array.\n");
+            return;
+        }
+        else
+        {
+            printf("Directory found in the array index %d.\n", indexToRemove);
+            printf("Directory name : %s\n", combinedFilesInfoAll[ssid].directories[indexToRemove].name);
+        }
+
+        // Shift elements to the left to fill the gap
+        if (storageServers[ssid].numberOfDirectories == 1)
+        {
+            free(combinedFilesInfoAll[ssid].directories);
+            combinedFilesInfoAll[ssid].directories = NULL;
+        }
+        else
+        {
+            for (int i = indexToRemove; i < storageServers[ssid].numberOfDirectories - 1; i++)
+            {
+                printf("BEFORE: Directory name : %s\n", combinedFilesInfoAll[ssid].directories[i].name);
+                strcpy(combinedFilesInfoAll[ssid].directories[i].name, combinedFilesInfoAll[ssid].directories[i + 1].name);
+                printf("AFTER: Directory name : %s\n", combinedFilesInfoAll[ssid].directories[i].name);
+            }
+        }
+
         // realloc combinedFileinfo[ssid].directories and add the above filename
-        combinedFilesInfoAll[ssid].directories = (struct DirectoryInfo *)realloc(combinedFilesInfoAll[ssid].directories, sizeof(struct DirectoryInfo) * (combinedFilesInfoAll[ssid].numberOfDirectories - 1));
-        strcpy(combinedFilesInfoAll[ssid].directories[combinedFilesInfoAll[ssid].numberOfDirectories].name, filename);
-        combinedFilesInfoAll->numberOfDirectories--;
+        combinedFilesInfoAll[ssid].numberOfDirectories--;
         storageServers[ssid].numberOfDirectories--;
+        if (combinedFilesInfoAll[ssid].numberOfDirectories != 0)
+        {
+            combinedFilesInfoAll[ssid].directories = (struct DirectoryInfo *)realloc(combinedFilesInfoAll[ssid].directories, sizeof(struct DirectoryInfo) * (combinedFilesInfoAll[ssid].numberOfDirectories));
+        }
+        removeHashEntryDirectory(filename, dirhash);
     }
     else
     {
@@ -521,22 +588,48 @@ void *ss_connection(void *arg)
     if (strcmp(request->command, "DELETE") == 0)
     {
         //* find the file from hash table
-        ff file;
-        file.ssid = -1;
-        file = fileSearchWithHash(request->arguments[1], fileshash);
-        printf("File found on storage server %d\n", file.ssid);
-        printf("file path : %s\n", file.filepath.name);
-        ss_id = file.ssid;
-        if (ss_id == -1)
+        if (strcmp(request->arguments[0], "FILE") == 0)
         {
-            printf("File not found in the hash table\n");
-            pthread_exit(NULL);
+            ff file;
+            file.ssid = -1;
+            file = fileSearchWithHash(request->arguments[1], fileshash);
+            printf("File found on storage server %d\n", file.ssid);
+            printf("file path : %s\n", file.filepath.name);
+            ss_id = file.ssid;
+            if (ss_id == -1)
+            {
+                printf("File not found in the hash table\n");
+                pthread_exit(NULL);
+            }
+        }
+        else if (strcmp(request->arguments[0], "DIR") == 0)
+        {
+            dd dir;
+            dir.ssid = -1;
+            dir = dirSearchWithHash(request->arguments[1], dirhash);
+            printf("Directory found on storage server %d\n", dir.ssid);
+            printf("Directory path : %s\n", dir.dirpath.name);
+            ss_id = dir.ssid;
+            if (ss_id == -1)
+            {
+                printf("Directory not found in the hash table\n");
+                pthread_exit(NULL);
+            }
         }
     }
     else if (strcmp(request->command, "COPY") == 0)
     {
         copy_file_between_ss(temp);
         pthread_exit(NULL);
+    }
+    else if (strcmp(request->command, "CREATE") == 0)
+    {
+        struct TreeClosestDirPacket tcdp;
+        tcdp = closestDir(&dirTree, request->arguments[1]);
+        printf("Closest dir : %s (Storage server %d)\n", tcdp.dirinfo.name, tcdp.ssid);
+        ss_id = tcdp.ssid;
+        ;
+        //* assign appropriate ssid here
     }
 
     printf("[+]Storage-Server %d thread created.\n", ss_id + 1);
@@ -620,7 +713,13 @@ void *ss_connection(void *arg)
         {
             if (strcmp(request->arguments[0], "FILE") == 0)
             {
+                printf("\n\n====\nI am going into file iffff\n\n====\n");
+                printf("Adding file %s to hash table\n", request->arguments[1]);
                 add_file_directory(request->arguments[1], 1, ss_id);
+                for (int i = 0; i < response.new_dir_count; i++)
+                {
+                    add_file_directory(response.dir[i].name, 2, ss_id);
+                }
             }
             else if (strcmp(request->arguments[0], "DIR") == 0)
             {
@@ -628,7 +727,6 @@ void *ss_connection(void *arg)
                 {
                     add_file_directory(response.dir[i].name, 2, ss_id);
                 }
-                // add_file_directory(request->arguments[1], 2, ss_id);
             }
         }
         else if (strcmp(request->command, "DELETE") == 0)
@@ -639,8 +737,18 @@ void *ss_connection(void *arg)
             }
             else if (strcmp(request->arguments[0], "DIR") == 0)
             {
-                remove_file_directory(request->arguments[1], 2, ss_id);
+                for (int i = 0; i < response.new_dir_count; i++)
+                {
+                    remove_file_directory(response.dir[i].name, 2, ss_id);
+                }
+                for (int i = 0; i < response.new_file_count; i++)
+                {
+                    remove_file_directory(response.file[i].name, 1, ss_id);
+                }
             }
+            // print_hash_table_directories(dirhash);
+            // print_hash_table_files(fileshash);
+            printf("\n\nPrinting storage server info after deletion\n");
             print_ss_info(&storageServers[ss_id], combinedFilesInfoAll[ss_id]);
         }
 
@@ -794,7 +902,59 @@ void *client_connection(void *arg)
                 print_client_request_info(client_request);
                 response.transactionId = client_request.transactionId;
 
-                if (strcmp(client_request.command, "READ") == 0 || strcmp(client_request.command, "FILEINFO") == 0 || strcmp(client_request.command, "WRITE") == 0)
+                if (strcmp(client_request.command, "LIST") == 0)
+                {
+                    char filename[MAX_PATH_SIZE] = "merged_paths.txt";
+                    createFileFromArray(filename, combinedFilesInfoAll, storageServers, number_of_ss);
+                    response.operation_performer = 1;
+
+                    printf("Sending response to client...\n");
+                    bytes_sent = send(socket_client, &response, sizeof(response), 0);
+                    if (bytes_sent == -1)
+                    {
+                        perror("Error sending data to Client");
+                        close(socket_client);
+                        close(socket_server_nm);
+                        pthread_exit(NULL);
+                    }
+
+                    bytes_received = recv(socket_client, &client_request, sizeof(client_request), 0);
+                    if (bytes_received == -1)
+                    {
+                        if (errno == EWOULDBLOCK || errno == EAGAIN)
+                        {
+                            printf("[-]Operation Would Block! Waiting for next recv().\n");
+                        }
+                        else if (errno == EINTR)
+                        {
+                            printf("[-]recv() was interrupted by a signal. Try again.\n");
+                        }
+                        else
+                        {
+                            perror("[-]recv() error");
+                            close(socket_client);
+                            close(socket_server_nm);
+                            pthread_exit(NULL);
+                        }
+                    }
+                    else if (bytes_received == 0)
+                    {
+                        printf("Connection closed by the Client.\n");
+                        close(socket_client);
+                        close(socket_server_nm);
+                        pthread_exit(NULL);
+                    }
+                    else
+                    {
+                        if (client_request.start_operation == 1)
+                        {
+                            printf("Client ready to receive the file...\n");
+                            sendFile(socket_client, filename);
+                            printf("File sent to client\n");
+                        }
+                    }
+                }
+                else if (strcmp(client_request.command, "READ") == 0 || strcmp(client_request.command, "FILEINFO") == 0 || strcmp(client_request.command, "WRITE") == 0)
                 {
                     ff file;
                     file.ssid = -1;
@@ -1097,6 +1257,11 @@ void *first_connection_ss(void *arg)
                 print_ss_info(&ss, combinedFilesInfoAll[ss.storageServerID]);
                 struct storage_server_connection_struct ss_struct;
                 ss_struct.ss_id = number_of_ss;
+
+                fillDirTree(&dirTree, combinedFilesInfoAll);
+                //* write a function to print the tree
+                printTree(&dirTree, 0);
+
                 pthread_create(&storageServerThreads[number_of_ss], NULL, storage_server_heartbeat, (void *)&ss_struct);
 
                 number_of_ss++;
@@ -1245,6 +1410,8 @@ int main()
     number_of_connected_ss = 0;
     pthread_t first_connection_client_thread, first_connection_ss_thread;
     initialize_hash_table(fileshash, dirhash);
+    initialiseDirTree(&dirTree);
+
     //* thread for listening to first connection from storage server
     pthread_create(&first_connection_ss_thread, NULL, first_connection_ss, NULL);
     pthread_create(&first_connection_client_thread, NULL, first_connection_client, NULL);

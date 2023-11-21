@@ -5,6 +5,34 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+char *get_substring_before_last_slash(const char *path)
+{
+    const char *last_slash = strrchr(path, '/');
+
+    if (last_slash == NULL)
+    {
+        return NULL; // No '/' in the string
+    }
+
+    // Calculate the length of the substring before the last '/'
+    size_t length = last_slash - path;
+
+    // Allocate memory for the substring
+    char *substring = malloc(length + 1); // +1 for null terminator
+
+    if (substring == NULL)
+    {
+        perror("Memory allocation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // Copy the substring before the last '/' into the new buffer
+    strncpy(substring, path, length);
+    substring[length] = '\0'; // Null-terminate the substring
+
+    return substring;
+}
+
 void removeConsecutiveDots(char *path)
 {
     int len = strlen(path);
@@ -62,12 +90,32 @@ void createDirectory(const char *path)
     free(copy);
 }
 
+void createFilePath(const char *filePath)
+{
+    char *pathCopy = strdup(filePath);
+    pathCopy = get_substring_before_last_slash(pathCopy);
+    createDirectory(pathCopy);
+
+    FILE *file = fopen(filePath, "w");
+    if (file != NULL)
+    {
+        fclose(file);
+        printf("File created: %s\n", filePath);
+    }
+    else
+    {
+        perror("Error creating file");
+        exit(EXIT_FAILURE);
+    }
+}
+
 int main()
 {
-    const char *path = "./a/b/c/d";
-    createDirectory(path);
+    const char *filePath = "path/to/your/file/file.txt";
 
-    printf("Directory created successfully: %s\n", path);
+    createFilePath(filePath);
+
+    printf("File created successfully: %s\n", filePath);
 
     return 0;
 }

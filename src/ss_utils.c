@@ -61,6 +61,26 @@ int createDirectory(const char *path, struct NM_to_SS_Response *response)
     return 1;
 }
 
+int createFilePath(const char *filePath, struct NM_to_SS_Response *response)
+{
+    char *pathCopy = strdup(filePath);
+    pathCopy = get_substring_before_last_slash(pathCopy);
+    createDirectory(pathCopy, response);
+
+    FILE *file = fopen(filePath, "w");
+    if (file != NULL)
+    {
+        fclose(file);
+        printf("File created: %s\n", filePath);
+    }
+    else
+    {
+        perror("Error creating file");
+        return -1;
+    }
+    return 1;
+}
+
 long get_file_size(FILE *fp)
 {
     fseek(fp, 0, SEEK_END);     // Move the file pointer to the end of the file

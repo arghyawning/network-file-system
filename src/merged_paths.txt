@@ -1,0 +1,4 @@
+Accessible Files:
+./delete3.txt
+
+Accessible Directories:

@@ -235,6 +235,72 @@ void removeDirectoryRecursive(const char *path)
     }
 }
 
+void removeFilesAndDirectory(const char *path, struct NM_to_SS_Response *response)
+{
+    DIR *dir = opendir(path);
+    struct dirent *entry;
+
+    if (dir == NULL)
+    {
+        perror("Error opening directory");
+        exit(EXIT_FAILURE);
+    }
+
+    // Iterate through each item in the directory
+    while ((entry = readdir(dir)) != NULL)
+    {
+        // Ignore "." and ".."
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        {
+            continue;
+        }
+
+        char fullPath[MAX_PATH_SIZE];
+        snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name);
+
+        // Recursively remove subdirectories and files
+        struct stat st;
+        if (stat(fullPath, &st) != 0)
+        {
+            perror("Error getting file/directory information");
+            exit(EXIT_FAILURE);
+        }
+
+        if (S_ISDIR(st.st_mode))
+        {
+            removeFilesAndDirectory(fullPath, response);
+        }
+        else if (S_ISREG(st.st_mode))
+        {
+            // Print the path before removing the file
+            printf("Removing file: %s\n", fullPath);
+            strcpy(response->file[response->new_file_count].name, fullPath);
+            response->new_file_count++;
+            // Remove the file
+            if (remove(fullPath) != 0)
+            {
+                perror("Error removing file");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+
+    // Close the directory
+    closedir(dir);
+
+    // Print the path before removing the directory itself
+    printf("Removing directory: %s\n", path);
+
+    // Remove the directory itself
+    if (rmdir(path) != 0)
+    {
+        perror("Error removing directory");
+        exit(EXIT_FAILURE);
+    }
+    strcpy(response->dir[response->new_dir_count].name, path);
+    response->new_dir_count++;
+}
+
 void readFile(char *filepath, int socket)
 {
     FILE *fp = fopen(filepath, "r");
@@ -679,19 +745,17 @@ void *namingServerConnectionThread(void *arg)
                 if (strcmp(request.arguments[0], "FILE") == 0)
                 {
                     printf("Creating file...\n");
-                    FILE *fp = fopen(request.arguments[1], "w");
-                    if (fp == NULL)
+                    if (createFilePath(request.arguments[1], &response) == -1)
                     {
                         perror("[-] Error in creating file.");
                         exit(1);
                     }
-                    fclose(fp);
                     printf("File created.\n");
                 }
                 else if (strcmp(request.arguments[0], "DIR") == 0)
                 {
                     printf("Creating directory...\n");
-                    if (createDirectory(request.arguments[1], &response) == 0)
+                    if (createDirectory(request.arguments[1], &response) == -1)
                     {
                         perror("[-] Error in creating directory.");
                         exit(1);
@@ -717,7 +781,9 @@ void *namingServerConnectionThread(void *arg)
                 else if (strcmp(request.arguments[0], "DIR") == 0)
                 {
                     printf("Deleting directory...\n");
-                    removeDirectoryRecursive(request.arguments[1]);
+                    response.new_dir_count = 0;
+                    response.new_file_count = 0;
+                    removeFilesAndDirectory(request.arguments[1], &response);
                     printf("Directory created.\n");
                 }
             }

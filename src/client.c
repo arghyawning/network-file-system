@@ -65,6 +65,60 @@ void readAndDisplayData(int socket)
     // free(buffer);
 }
 
+void displayAccessiblePaths(int socket)
+{
+    char *buffer = NULL;
+    size_t size = 0;
+    ssize_t bytesRead;
+
+    printf("=============================== Accessible Paths ==============================\n\n");
+
+    while (1)
+    {
+        struct Packet packet;
+        bytesRead = recv(socket, &packet, sizeof(struct Packet), 0);
+
+        if (bytesRead == -1)
+        {
+            perror("[-] Error in receiving data");
+            exit(EXIT_FAILURE);
+        }
+        else if (bytesRead == 0)
+        {
+            // No more data to receive
+            break;
+        }
+
+        if (packet.isEnd)
+        {
+            // End of file
+            break;
+        }
+
+        // Dynamically allocate memory for the buffer
+        // printf("Received packet number %d\n", packet.packetNumber);
+        // size += strlen(packet.data);
+        // buffer = realloc(buffer, size);
+        // if (buffer == NULL)
+        // {
+        //     perror("[-] Memory allocation failed");
+        //     exit(EXIT_FAILURE);
+        // }
+
+        // // Append received data to the buffer
+        // strcat(buffer, packet.data);
+        printf("%s", packet.data);
+    }
+
+    printf("\n\n===============================================================================\n\n");
+
+    // Display the received data
+    // printf("Received data:\n%s\n", buffer);
+
+    // Free the allocated memory
+    // free(buffer);
+}
+
 void DisplayFileInfo(int socket, char *filepath)
 {
     struct stat fileStat;
@@ -265,6 +319,15 @@ void errorDisplay(int flag)
     }
 }
 
+void add_prefix_if_missing(char *input_string)
+{
+    if (strncmp(input_string, "./", 2) != 0)
+    {
+        memmove(input_string + 2, input_string, strlen(input_string) + 1);
+        strncpy(input_string, "./", 2);
+    }
+}
+
 void inputParse(char *input)
 {
     char *command;
@@ -277,8 +340,13 @@ void inputParse(char *input)
     }
 
     char *filepath = strtok(NULL, " ");
-
-    if (strcmp(command, "READ") == 0)
+    if (strcmp(command, "LIST") == 0)
+    {
+        strcpy(clientRequest.command, "LIST");
+        strcpy(clientRequest.arguments[0], "");
+        strcpy(clientRequest.arguments[1], "");
+    }
+    else if (strcmp(command, "READ") == 0)
     {
         if (filepath == NULL)
         {
@@ -293,6 +361,11 @@ void inputParse(char *input)
         strcpy(clientRequest.command, "READ");
         strcpy(clientRequest.arguments[0], filepath);
         strcpy(clientRequest.arguments[1], "");
+        if (strlen(clientRequest.arguments[0]) > 0)
+        {
+            add_prefix_if_missing(clientRequest.arguments[0]);
+            printf("Modified path: %s\n", clientRequest.arguments[0]);
+        }
     }
     else if (strcmp(command, "WRITE") == 0)
     {
@@ -309,6 +382,12 @@ void inputParse(char *input)
         strcpy(clientRequest.command, "WRITE");
         strcpy(clientRequest.arguments[0], filepath);
         strcpy(clientRequest.arguments[1], "");
+
+        if (strlen(clientRequest.arguments[0]) > 0)
+        {
+            add_prefix_if_missing(clientRequest.arguments[0]);
+            printf("Modified path: %s\n", clientRequest.arguments[0]);
+        }
     }
     else if (strcmp(command, "DELETE") == 0)
     {
@@ -333,6 +412,12 @@ void inputParse(char *input)
         strcpy(clientRequest.command, "DELETE");
         strcpy(clientRequest.arguments[0], type);
         strcpy(clientRequest.arguments[1], filename);
+
+        if (strlen(clientRequest.arguments[1]) > 0)
+        {
+            add_prefix_if_missing(clientRequest.arguments[1]);
+            printf("Modified path: %s\n", clientRequest.arguments[1]);
+        }
     }
     else if (strcmp(command, "COPY") == 0)
     {
@@ -362,6 +447,18 @@ void inputParse(char *input)
         strcpy(clientRequest.command, "COPY");
         strcpy(clientRequest.arguments[0], srcpath);
         strcpy(clientRequest.arguments[1], destpath);
+
+        if (strlen(clientRequest.arguments[0]) > 0)
+        {
+            add_prefix_if_missing(clientRequest.arguments[0]);
+            printf("Modified path: %s\n", clientRequest.arguments[0]);
+        }
+
+        if (strlen(clientRequest.arguments[1]) > 0)
+        {
+            add_prefix_if_missing(clientRequest.arguments[1]);
+            printf("Modified path: %s\n", clientRequest.arguments[1]);
+        }
     }
     else if (strcmp(command, "CREATE") == 0)
     {
@@ -386,6 +483,12 @@ void inputParse(char *input)
         strcpy(clientRequest.command, "CREATE");
         strcpy(clientRequest.arguments[0], type);
         strcpy(clientRequest.arguments[1], filename);
+
+        if (strlen(clientRequest.arguments[1]) > 0)
+        {
+            add_prefix_if_missing(clientRequest.arguments[1]);
+            printf("Modified path: %s\n", clientRequest.arguments[1]);
+        }
     }
     else if (strcmp(command, "FILEINFO") == 0)
     {
@@ -402,6 +505,12 @@ void inputParse(char *input)
         strcpy(clientRequest.command, "FILEINFO");
         strcpy(clientRequest.arguments[0], filepath);
         strcpy(clientRequest.arguments[1], "");
+
+        if (strlen(clientRequest.arguments[0]) > 0)
+        {
+            add_prefix_if_missing(clientRequest.arguments[0]);
+            printf("Modified path: %s\n", clientRequest.arguments[0]);
+        }
     }
     else
     {
@@ -670,7 +779,25 @@ void *naming_server_connection(void *arg)
 
         if (response.operation_performer == 1)
         {
+
             print_client_request_info(clientRequest);
+            if (strcmp(clientRequest.command, "LIST") == 0)
+            {
+
+                printf("Starting to list...\n");
+                clientRequest.start_operation = 1;
+                bytes_sent = send(socket_client, &clientRequest, sizeof(clientRequest), 0);
+                if (bytes_sent == -1)
+                {
+                    perror("Error sending heartbeat to storage server");
+                    close(socket_client);
+                    // storageServers[ss_id].isConnected = 0;
+                    // printf("[-]Connection to Storage-Server %d lost.\n", ss_id + 1);
+                    break;
+                }
+                displayAccessiblePaths(socket_client);
+            }
+            
             if (clientRequest.operation_status == 1)
             {
                 if (strcmp(clientRequest.command, "CREATE"))
@@ -682,6 +809,17 @@ void *naming_server_connection(void *arg)
                     else if (strcmp(clientRequest.arguments[0], "DIR"))
                     {
                         printf("Directory created successfully\n");
+                    }
+                }
+                else if (strcmp(clientRequest.command, "DELETE"))
+                {
+                    if (strcmp(clientRequest.arguments[0], "FILE"))
+                    {
+                        printf("File deleted successfully\n");
+                    }
+                    else if (strcmp(clientRequest.arguments[0], "DIR"))
+                    {
+                        printf("Directory deleted successfully\n");
                     }
                 }
             }

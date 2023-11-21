@@ -14,13 +14,27 @@ Monsoon 2023, IIIT Hyderabad.
 
 ## Functionalities
 
-### read
+### READ
 
 Input format:
 
 ```bash
 READ <filepath>
 ```
+
+Example usage
+
+```bash
+READ test2.txt
+```
+
+or
+
+```bash
+READ ./test2.txt
+```
+
+STATUS: Working perfectly
 
 ### write
 
@@ -47,6 +61,14 @@ Input format:
 ```bash
 COPY <source_filepath> <destination_path>
 ```
+
+Example usage
+
+```bash
+COPY test2.txt test1/test2_copy.txt
+```
+
+STATUS: Working perfectly
 
 ### create
 

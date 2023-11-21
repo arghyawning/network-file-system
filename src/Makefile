@@ -4,7 +4,7 @@ CFLAGS =
 all: nm client ss
 
 nm: naming-server.c
-	$(CC) $(CFLAGS) naming-server.c hashing.c data_utils.c network_wrapper.c nm_utils.c print_utils.c -o nm
+	$(CC) $(CFLAGS) naming-server.c hashing.c data_utils.c network_wrapper.c nm_utils.c print_utils.c search_tree.c -o nm
 
 client: client.c
 	$(CC) $(CFLAGS) client.c print_utils.c -o client
