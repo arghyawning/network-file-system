@@ -13,6 +13,178 @@ int socket_server_heartbeat, socket_ss_heartbeat; //* Heartbeat Thread
 int socket_server_nm, socket_ss_nm;               //* NamingServerConnection Thread
 int socket_server_cc, socket_ss_cc;               //* ClientConnection Thread
 
+void copy_file(struct ClientRequest request, int socket_nm)
+{
+    int bytes_sent, bytes_received;
+    struct NM_to_SS_Response response;
+    print_client_request_info(request);
+    printf("Inside copy_file\n");
+    printf("Source SS: %d\n", request.copyInfo.ss_source_id);
+    printf("Destination SS: %d\n", request.copyInfo.ss_destination_id);
+    printf("My storage server ID: %d\n", storage_server.storageServerID);
+
+    if (request.copyInfo.ss_source_id == storage_server.storageServerID)
+    {
+        response.source_ss_confirmation = 1;
+        printf("Source SS: %d\n", request.copyInfo.ss_source_id);
+        bytes_sent = send(socket_nm, &response, sizeof(response), 0);
+        if (bytes_sent == -1)
+        {
+            perror("Error sending data to Naming-Server");
+            close(socket_nm);
+            return;
+        }
+
+        bytes_received = recv(socket_nm, &response, sizeof(response), 0);
+        if (bytes_received == -1)
+        {
+            perror("Error receiving data from Naming-Server");
+            close(socket_nm);
+            return;
+        }
+        else if (bytes_received == 0)
+        {
+            printf("Connection closed by the Naming-Server.\n");
+            close(socket_nm);
+            return;
+        }
+
+        if (response.start_operation == 1)
+        {
+            printf("Starting copy operation...\n");
+        }
+        else
+        {
+            printf("Copy operation cancelled.\n");
+            return;
+        }
+
+        char buffer[READ_SIZE];
+        printf("Filepath for source: %s\n", request.arguments[0]);
+        FILE *file = fopen(request.arguments[0], "r");
+        int file_size = get_file_size(file);
+        printf("File size: %d\n", file_size);
+
+        //* seek to the start of the file
+        fseek(file, 0, SEEK_SET);
+
+        int packetNumber = 0;
+        // int bytes_sent = 0;
+        while (1)
+        {
+            struct Packet packet;
+            packet.packetNumber = packetNumber;
+            // Read a chunk of data from the file
+            size_t bytes_read = fread(buffer, 1, READ_SIZE, file);
+
+            if (bytes_read < READ_SIZE)
+            {
+                packet.isEnd = 1;
+            }
+            else
+            {
+                packet.isEnd = 0;
+            }
+
+            printf("Packet number: %d\n", packetNumber);
+            printf("Packet data: %s\n", buffer);
+
+            strncpy(packet.data, buffer, bytes_read);
+            packet.data[bytes_read] = '\0';
+
+            bytes_sent = send(socket_nm, &packet, sizeof(struct Packet), 0);
+            if (bytes_sent == -1)
+            {
+                perror("Error sending data to Naming-Server");
+                close(socket_nm);
+                return;
+            }
+
+            bytes_received = recv(socket_nm, &packet, sizeof(packet), 0);
+            if (bytes_received == -1)
+            {
+                perror("Error receiving data from Naming-Server");
+                close(socket_nm);
+                return;
+            }
+            else if (bytes_received == 0)
+            {
+                printf("Connection closed by the Naming-Server.\n");
+                close(socket_nm);
+                return;
+            }
+            packetNumber++;
+            if (packet.isEnd)
+            {
+                break;
+            }
+        }
+
+        fclose(file);
+        printf("File sent for copying successfully.\n");
+        return;
+    }
+    else if (request.copyInfo.ss_destination_id == storage_server.storageServerID)
+    {
+        response.destination_ss_confirmation = 1;
+        printf("Destination SS: %d\n", request.copyInfo.ss_destination_id);
+        bytes_sent = send(socket_nm, &response, sizeof(response), 0);
+
+        // char *filename = strrchr(request.arguments[0], '/') + 1;
+        char filepath[MAX_PATH_SIZE];
+        strcpy(filepath, request.arguments[1]);
+        // strcat(filepath, "/");
+        // strcat(filepath, filename);
+        printf("Filepath for destination: %s\n", filepath);
+
+        //* open a file in write mode. create if it does not exist
+        FILE *fp = fopen(filepath, "w");
+        if (fp == NULL)
+        {
+            perror("[-]Error in creating file.");
+            exit(1);
+        }
+
+        while (1)
+        {
+            struct Packet packet;
+            bytes_received = recv(socket_nm, &packet, sizeof(struct Packet), 0);
+            if (bytes_received == -1)
+            {
+                perror("Error receiving data from Naming-Server");
+                close(socket_nm);
+                return;
+            }
+            else if (bytes_received == 0)
+            {
+                printf("Connection closed by the Naming-Server.\n");
+                close(socket_nm);
+                return;
+            }
+
+            printf("[+]Packet %d received.\n", packet.packetNumber);
+            printf("[+]Data: %s\n", packet.data);
+
+            fwrite(packet.data, 1, strlen(packet.data), fp);
+
+            if (packet.isEnd)
+            {
+                break;
+            }
+        }
+
+        fclose(fp);
+
+        printf("File copied successfully.\n");
+        return;
+    }
+    else
+    {
+        printf("Wrong Storage server.\n");
+        return;
+    }
+}
+
 void removeDirectoryRecursive(const char *path)
 {
     DIR *dir;
@@ -292,10 +464,14 @@ void initiate_SS()
         exit(EXIT_FAILURE);
     }
 
-    storage_server.storageServerID = ss_id + 1;
-
-    struct CombinedFilesInfo combinedFilesInfo;
     // combinedFilesInfo = deserializeData(buffer, &storage_server);
+    printf("Storage Server ID: %d\n", storage_server.storageServerID);
+    printf("IP Address: %s\n", storage_server.ipAddress);
+    printf("Storage Server Port: %d\n", storage_server.storageServerPort);
+    printf("Client Port: %d\n", storage_server.clientPort);
+    printf("Number of Files: %d\n", storage_server.numberOfFiles);
+    printf("Number of Directories: %d\n", storage_server.numberOfDirectories);
+    printf("Storage-Server boot path: %s\n", storage_server.ss_boot_path);
     // print_ss_info(&storage_server, combinedFilesInfo);
 
     close(socket_ss_initial);
@@ -544,6 +720,10 @@ void *namingServerConnectionThread(void *arg)
                     removeDirectoryRecursive(request.arguments[1]);
                     printf("Directory created.\n");
                 }
+            }
+            else if (strcmp(request.command, "COPY") == 0)
+            {
+                copy_file(request, socket_ss_nm);
             }
             // else if (strcmp(request.command, "COPY") == 0)
             // {

@@ -18,7 +18,7 @@ void assign_ports_ss(struct StorageServerInfo *ss)
     ss->heartbeatPort = base_port;
     ss->storageServerPort = base_port + 1;
     ss->clientPort = base_port + 2;
-
+    ss->copyPort = base_port + 3;
     return;
 }
 

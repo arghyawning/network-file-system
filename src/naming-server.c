@@ -125,6 +125,276 @@ void makeRedundantServers(struct StorageServerInfo *mainServer)
     }
 }
 
+void prepare_for_copy(struct ClientRequest *request)
+{
+    //* source_path will be of the form "./a/b/c.txt" and destination path will be of the form "./c/d"
+    //* We need to extract the file name from the source path and append it to the destination path
+
+    char *source_path = strrchr(request->arguments[0], '/') + 1;
+    char *destination_path = get_substring_before_last_slash(request->arguments[1]);
+    destination_path = strrchr(destination_path, '/') + 1;
+
+    int source_storage_ss = fileSearchWithHash(source_path, fileshash).ssid;
+    int destination_ss = dirSearchWithHash(destination_path, dirhash).ssid;
+
+    int source_storage_port = BASE_PORT_SS + source_storage_ss * MAX_PORTS_PER_SS + 3;
+    int destination_port = BASE_PORT_SS + destination_ss * MAX_PORTS_PER_SS + 3;
+
+    request->copyInfo.ss_source_id = source_storage_ss;
+    request->copyInfo.ss_destination_id = destination_ss;
+    request->copyInfo.ss_source_port = source_storage_port;
+    request->copyInfo.ss_destination_port = destination_port;
+
+    printf("Source storage server: %d\n", request->copyInfo.ss_source_id);
+    printf("Destination storage server: %d\n", request->copyInfo.ss_destination_id);
+    printf("Source storage server port: %d\n", request->copyInfo.ss_source_port);
+    printf("Destination storage server port: %d\n", request->copyInfo.ss_destination_port);
+
+    return;
+}
+
+void copy_file_between_ss(struct ClientRequest request)
+{
+    struct CopyInfo copyInfo;
+    prepare_for_copy(&request);
+    copyInfo = request.copyInfo;
+
+    int storage_server1, storage_server2, main_server;
+    struct sockaddr_in storage1_addr, storage2_addr, main_addr;
+
+    // Create socket for storage server 1
+    storage_server1 = socket(AF_INET, SOCK_STREAM, 0);
+    if (storage_server1 == -1)
+    {
+        perror("Error creating socket for storage server 1");
+        exit(EXIT_FAILURE);
+    }
+
+    // Set up address for storage server 1
+    memset(&storage1_addr, 0, sizeof(storage1_addr));
+    storage1_addr.sin_family = AF_INET;
+    storage1_addr.sin_addr.s_addr = inet_addr(storageServers[copyInfo.ss_source_id].ipAddress);
+    storage1_addr.sin_port = htons(storageServers[copyInfo.ss_source_id].storageServerPort); // Replace with the actual port number
+
+    // Connect to storage server 1
+    if (connect(storage_server1, (struct sockaddr *)&storage1_addr, sizeof(storage1_addr)) == -1)
+    {
+        perror("Error connecting to storage server 1");
+        close(storage_server1);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Connected to source storage server %d for copying. \n", copyInfo.ss_source_id);
+
+    // Repeat the above steps for storage server 2 and main server
+
+    // Create socket for storage server 2
+    storage_server2 = socket(AF_INET, SOCK_STREAM, 0);
+    if (storage_server2 == -1)
+    {
+        perror("Error creating socket for storage server 2");
+        close(storage_server1);
+        exit(EXIT_FAILURE);
+    }
+
+    memset(&storage2_addr, 0, sizeof(storage2_addr));
+    storage2_addr.sin_family = AF_INET;
+    storage2_addr.sin_addr.s_addr = inet_addr(storageServers[copyInfo.ss_destination_id].ipAddress);
+    storage2_addr.sin_port = htons(storageServers[copyInfo.ss_destination_id].storageServerPort); // Replace with the actual port number
+
+    if (connect(storage_server2, (struct sockaddr *)&storage2_addr, sizeof(storage2_addr)) == -1)
+    {
+        perror("Error connecting to storage server 2");
+        close(storage_server1);
+        close(storage_server2);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Connected to destination storage server %d for copying. \n", copyInfo.ss_destination_id);
+
+    int bytes_sent, bytes_received;
+    struct NM_to_SS_Response source_response, destination_response;
+    bytes_sent = send(storage_server1, &request, sizeof(struct ClientRequest), 0);
+    if (bytes_sent == -1)
+    {
+        perror("Error sending request to storage server 1");
+        close(storage_server1);
+        close(storage_server2);
+        exit(EXIT_FAILURE);
+    }
+    bytes_received = recv(storage_server1, &source_response, sizeof(struct NM_to_SS_Response), 0);
+    if (bytes_received == -1)
+    {
+        perror("Error receiving response from storage server 1");
+        close(storage_server1);
+        close(storage_server2);
+        exit(EXIT_FAILURE);
+    }
+    if (source_response.source_ss_confirmation == 1)
+    {
+        printf("Source storage server %d confirmed the operation.\nChecking For storage server %d\n", copyInfo.ss_source_id, copyInfo.ss_destination_id);
+    }
+    else
+    {
+        printf("Source storage server %d denied the operation.\n", copyInfo.ss_source_id);
+        close(storage_server1);
+        close(storage_server2);
+        exit(EXIT_FAILURE);
+    }
+
+    bytes_sent = send(storage_server2, &request, sizeof(struct ClientRequest), 0);
+    if (bytes_sent == -1)
+    {
+        perror("Error sending request to storage server 2");
+        close(storage_server1);
+        close(storage_server2);
+        exit(EXIT_FAILURE);
+    }
+    bytes_received = recv(storage_server2, &destination_response, sizeof(struct NM_to_SS_Response), 0);
+    if (bytes_received == -1)
+    {
+        perror("Error receiving response from storage server 2");
+        close(storage_server1);
+        close(storage_server2);
+        exit(EXIT_FAILURE);
+    }
+    if (destination_response.destination_ss_confirmation == 1)
+    {
+        printf("Destination storage server %d confirmed the operation.\n", copyInfo.ss_destination_id);
+    }
+    else
+    {
+        printf("Destination storage server %d denied the operation.\n", copyInfo.ss_destination_id);
+        close(storage_server1);
+        close(storage_server2);
+        exit(EXIT_FAILURE);
+    }
+
+    // Create socket for main server
+    // main_server = socket(AF_INET, SOCK_STREAM, 0);
+    // if (main_server == -1)
+    // {
+    //     perror("Error creating socket for main server");
+    //     close(storage_server1);
+    //     close(storage_server2);
+    //     exit(EXIT_FAILURE);
+    // }
+
+    // memset(&main_addr, 0, sizeof(main_addr));
+    // main_addr.sin_family = AF_INET;
+    // main_addr.sin_addr.s_addr = INADDR_ANY;
+    // main_addr.sin_port = htons(12347); // Replace with the actual port number
+
+    // // Bind the socket to the address
+    // if (bind(main_server, (struct sockaddr *)&main_addr, sizeof(main_addr)) == -1)
+    // {
+    //     perror("Error binding main server socket");
+    //     close(storage_server1);
+    //     close(storage_server2);
+    //     close(main_server);
+    //     exit(EXIT_FAILURE);
+    // }
+
+    // // Listen for incoming connections
+    // if (listen(main_server, 10) == -1)
+    // {
+    //     perror("Error listening for connections");
+    //     close(storage_server1);
+    //     close(storage_server2);
+    //     close(main_server);
+    //     exit(EXIT_FAILURE);
+    // }
+
+    // // Accept connection from storage server 1
+    // int storage1_connection = accept(main_server, NULL, NULL);
+    // if (storage1_connection == -1)
+    // {
+    //     perror("Error accepting connection from storage server 1");
+    //     close(storage_server1);
+    //     close(storage_server2);
+    //     close(main_server);
+    //     exit(EXIT_FAILURE);
+    // }
+
+    // // Accept connection from storage server 2
+    // int storage2_connection = accept(main_server, NULL, NULL);
+    // if (storage2_connection == -1)
+    // {
+    //     perror("Error accepting connection from storage server 2");
+    //     close(storage_server1);
+    //     close(storage_server2);
+    //     close(main_server);
+    //     exit(EXIT_FAILURE);
+    // }
+
+    // starting the operation
+    source_response.start_operation = 1;
+    bytes_sent = send(storage_server1, &source_response, sizeof(struct NM_to_SS_Response), 0);
+    if (bytes_sent == -1)
+    {
+        perror("Error sending start operation to storage server 1");
+        close(storage_server1);
+        close(storage_server2);
+        close(main_server);
+        return;
+    }
+    while (1)
+    {
+        struct Packet packet;
+        bytes_received = recv(storage_server1, &packet, sizeof(struct Packet), 0);
+        if (bytes_received == -1)
+        {
+            perror("Error receiving data from storage server 1");
+            close(storage_server1);
+            close(storage_server2);
+            close(main_server);
+            return;
+        }
+        else if (bytes_received == 0)
+        {
+            printf("Connection closed by storage server 1\n");
+            close(storage_server1);
+            close(storage_server2);
+            close(main_server);
+            return;
+        }
+        else
+            printf("Received: %s\n", packet.data);
+        {
+
+            bytes_sent = send(storage_server2, &packet, sizeof(struct Packet), 0);
+            if (bytes_sent == -1)
+            {
+                perror("Error sending data to storage server 2");
+                close(storage_server1);
+                close(storage_server2);
+                close(main_server);
+                return;
+            }
+
+            bytes_sent = send(storage_server1, &packet, sizeof(struct Packet), 0);
+            if (bytes_sent == -1)
+            {
+                perror("Error sending data to storage server 1");
+                close(storage_server1);
+                close(storage_server2);
+                close(main_server);
+                return;
+            }
+            if (packet.isEnd == 1)
+            {
+                break;
+            }
+        }
+    }
+    printf("NM : File copied successfully\n");
+    // Close sockets
+    close(storage_server1);
+    close(storage_server2);
+
+    return;
+}
+
 void add_file_directory(char *filename, int type, int ssid)
 {
     if (type == 1)
@@ -238,6 +508,14 @@ void remove_file_directory(char *filename, int type, int ssid)
 void *ss_connection(void *arg)
 {
     struct ClientRequest *request = (struct ClientRequest *)arg;
+    struct ClientRequest temp;
+    //* copy request to temp
+    temp.clientID = request->clientID;
+    temp.transactionId = request->transactionId;
+    strcpy(temp.command, request->command);
+    strcpy(temp.arguments[0], request->arguments[0]);
+    strcpy(temp.arguments[1], request->arguments[1]);
+
     int ss_id = 0;
 
     if (strcmp(request->command, "DELETE") == 0)
@@ -254,6 +532,11 @@ void *ss_connection(void *arg)
             printf("File not found in the hash table\n");
             pthread_exit(NULL);
         }
+    }
+    else if (strcmp(request->command, "COPY") == 0)
+    {
+        copy_file_between_ss(temp);
+        pthread_exit(NULL);
     }
 
     printf("[+]Storage-Server %d thread created.\n", ss_id + 1);
@@ -300,14 +583,6 @@ void *ss_connection(void *arg)
             pthread_exit(NULL);
         }
     }
-
-    struct ClientRequest temp;
-    //* copy request to temp
-    temp.clientID = request->clientID;
-    temp.transactionId = request->transactionId;
-    strcpy(temp.command, request->command);
-    strcpy(temp.arguments[0], request->arguments[0]);
-    strcpy(temp.arguments[1], request->arguments[1]);
 
     int bytes_sent, bytes_received;
     bytes_sent = send(socket_ss, &temp, sizeof(temp), 0);
@@ -370,7 +645,7 @@ void *ss_connection(void *arg)
         }
 
         // print_hash_table_files(fileshash);
-        print_hash_table_directories(dirhash);
+        // print_hash_table_directories(dirhash);
         // else if(strcmp(request->command, "COPY") == 0)
         // {
         //     if (strcmp(request->arguments[0], "FILE") == 0)

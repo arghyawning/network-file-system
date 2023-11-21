@@ -84,6 +84,7 @@ struct StorageServerInfo
     int storageServerPort;
     int clientPort;
     int heartbeatPort;
+    int copyPort;
     int isConnected;
     int numberOfFiles;
     int numberOfDirectories;
@@ -109,6 +110,14 @@ struct CombinedFilesInfo
     struct DirectoryInfo *directories; //* Pointer to all the directory names
 };
 
+struct CopyInfo
+{
+    int ss_source_id;
+    int ss_destination_id;
+    int ss_source_port;
+    int ss_destination_port;
+};
+
 struct ClientInfo
 {
     int clientID;
@@ -126,6 +135,7 @@ struct ClientRequest
     char arguments[MAX_COMMAND_ARGUMENTS][MAX_BUFFER_SIZE];
     int clientID;
     int operation_status;
+    struct CopyInfo copyInfo;
 };
 
 struct Client_to_NM_response
@@ -151,6 +161,9 @@ struct NM_to_SS_Response
     int operation_status;
     struct DirectoryInfo dir[MAX_NEW_DIRECTORIES];
     int new_dir_count;
+    int source_ss_confirmation;
+    int destination_ss_confirmation;
+    int start_operation;
 };
 
 struct Packet
@@ -158,7 +171,7 @@ struct Packet
     int isStart; // 1 if start of file, 0 otherwise
     int isEnd;   // 1 if end of file, 0 otherwise
     int packetNumber;
-    char data[READ_SIZE];
+    char data[READ_SIZE + 1];
 };
 
 struct PacketWrite
@@ -219,6 +232,7 @@ int compareFilePath(const char *X, const struct StorageServerInfo *array, int nu
 
 //* ss_utils.h
 int createDirectory(const char *path, struct NM_to_SS_Response *response);
+long get_file_size(FILE *fp);
 
 //* print_utils.h
 void print_response_info(struct Client_to_NM_response response);
@@ -230,6 +244,7 @@ void print_client_request_info_ss(struct Client_to_SS_Request *request);
 //* data_utils.h
 struct CombinedFilesInfo deserializeData(char *buffer, struct StorageServerInfo *ss);
 void serializeData(struct StorageServerInfo *ss, int nFiles, int nDirectories, struct DirectoryInfo directories_all[], struct FileInfo files_all[], char *buffer);
+char *get_substring_before_last_slash(const char *path);
 
 //* network_wrapper.h
 void close_socket(int socket);

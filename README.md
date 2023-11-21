@@ -35,8 +35,10 @@ WRITE <filepath>
 Input format:
 
 ```bash
-DELETE <filepath>
+DELETE option <filepath>
 ```
+
+option: FILE for deleting a file, DIR for deleting a directory
 
 ### copy
 
@@ -51,8 +53,10 @@ COPY <source_filepath> <destination_path>
 Input format:
 
 ```bash
-CREATE <filepath>
+CREATE option <filepath>
 ```
+
+option: FILE for deleting a file, DIR for deleting a directory
 
 ### file information
 

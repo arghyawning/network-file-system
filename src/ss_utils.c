@@ -60,3 +60,11 @@ int createDirectory(const char *path, struct NM_to_SS_Response *response)
     free(copy);
     return 1;
 }
+
+long get_file_size(FILE *fp)
+{
+    fseek(fp, 0, SEEK_END);     // Move the file pointer to the end of the file
+    long file_size = ftell(fp); // Get the position of the file pointer, which is the file size
+
+    return file_size;
+}
