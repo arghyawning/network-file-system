@@ -69,3 +69,32 @@ void print_client_request_info_ss(struct Client_to_SS_Request *request)
 
     return;
 }
+
+void logMessage(char *filepath, char *message)
+{
+    //* get time of day
+    char temp_message[2048];
+    time_t currentTime;
+    time(&currentTime);
+
+    // Format the time without newline character
+    struct tm *localTime = localtime(&currentTime);
+    char formattedTime[50]; // You can adjust the size as needed
+
+    strftime(formattedTime, sizeof(formattedTime), "%a %b %d %Y %H:%M:%S", localTime);
+
+    // Print the formatted time
+    printf("%s\n", formattedTime);
+
+    FILE *logFile = fopen(filepath, "a");
+    if (logFile == NULL)
+    {
+        perror("Error opening log file");
+        exit(EXIT_FAILURE);
+    }
+
+    sprintf(temp_message, "[%s] : %s", formattedTime, message);
+
+    fprintf(logFile, "\n%s\n", temp_message);
+    fclose(logFile);
+}

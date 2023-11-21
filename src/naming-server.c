@@ -481,6 +481,11 @@ void remove_file_directory(char *filename, int type, int ssid)
         }
 
         removeHashEntryFile(filename, fileshash);
+        // printf("BEFORE TREE\n");
+        // printTree(&dirTree, 0);
+        removeFromTree(&dirTree, 0, filename);
+        // printf("AFTER TREE\n");
+        // printTree(&dirTree, 0);
     }
     else if (type == 2)
     {
@@ -534,6 +539,11 @@ void remove_file_directory(char *filename, int type, int ssid)
             combinedFilesInfoAll[ssid].directories = (struct DirectoryInfo *)realloc(combinedFilesInfoAll[ssid].directories, sizeof(struct DirectoryInfo) * (combinedFilesInfoAll[ssid].numberOfDirectories));
         }
         removeHashEntryDirectory(filename, dirhash);
+        // printf("BEFORE TREE\n");
+        // printTree(&dirTree, 0);
+        removeFromTree(&dirTree, 1, filename);
+        // printf("AFTER TREE\n");
+        // printTree(&dirTree, 0);
     }
     else
     {

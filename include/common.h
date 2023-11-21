@@ -249,6 +249,7 @@ void initialiseDirTree(struct DirTree *dirTree);
 void fillDirTree(struct DirTree *dirTree, struct CombinedFilesInfo *combinedFilesInfoAll);
 int searchDirTree(struct DirTree *dirTree, char *filename);
 struct TreeClosestDirPacket closestDir(struct DirTree *dirTree, char *filename);
+int removeFromTree(struct DirTree *dirTree, int type, char *delpath);
 
 //* storage_server.h
 void scan_dir(struct FileInfo **files, struct DirectoryInfo **directories, struct NumberOfFiles *fileInfo);

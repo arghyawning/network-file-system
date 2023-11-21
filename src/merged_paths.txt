@@ -1,4 +1,8 @@
 Accessible Files:
-./delete3.txt
+./test1/delete3.txt
+./test1/test11/delete31.txt
 
 Accessible Directories:
+./test1
+./test1/test11
+./test2

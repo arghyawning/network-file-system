@@ -259,6 +259,94 @@ struct TreeClosestDirPacket closestDir(struct DirTree *dirTree, char *filename)
     return treeClosestDirPacket;
 }
 
+int removeFromTree(struct DirTree *dirTree, int type, char *delpath)
+{
+    // type 0 for file, 1 for directory
+
+    if (dirTree == NULL)
+    {
+        printf("Error: Path %s does not exist\n", delpath);
+        return 0;
+    }
+
+    char *path = (char *)malloc(MAX_PATH_SIZE * sizeof(char));
+    char *nextpath = (char *)malloc(MAX_PATH_SIZE * sizeof(char));
+
+    char *temp = (char *)malloc(MAX_PATH_SIZE * sizeof(char));
+    strcpy(temp, delpath);
+
+    path = strtok(temp, "/");
+    path = strtok(NULL, "/");
+    if (path == NULL)
+    {
+        printf("Error: Path %s does not exist\n", delpath);
+        return 0;
+    }
+    nextpath = strtok(NULL, "/");
+
+    while (nextpath != NULL)
+    {
+        int flag = 0;
+        int i;
+        for (i = 0; i < dirTree->numberOfDirectories; i++)
+        {
+            if (strcmp(dirTree->directories[i].dirinfo.name, path) == 0)
+            {
+                dirTree = &dirTree->directories[i];
+                flag = 1;
+                break;
+            }
+        }
+
+        if (flag == 0)
+        {
+            printf("Error: Directory %s does not exist\n", path);
+            return 0;
+        }
+
+        strcpy(path, nextpath);
+        nextpath = strtok(NULL, "/");
+    }
+
+    int i;
+    if (type == 0) // file
+    {
+        for (i = 0; i < dirTree->numberOfFiles; i++)
+        {
+            if (strcmp(dirTree->files[i].name, path) == 0)
+            {
+                int j;
+                for (j = i; j < dirTree->numberOfFiles - 1; j++)
+                    dirTree->files[j] = dirTree->files[j + 1];
+                dirTree->numberOfFiles--;
+                dirTree->files = (struct FileInfo *)realloc(dirTree->files, dirTree->numberOfFiles * sizeof(struct FileInfo));
+                return 1;
+            }
+        }
+    }
+    else // directory
+    {
+        for (i = 0; i < dirTree->numberOfDirectories; i++)
+        {
+            if (strcmp(dirTree->directories[i].dirinfo.name, path) == 0)
+            {
+                int j;
+                dirTree->directories[i].directories = NULL;
+                dirTree->directories[i].files = NULL;
+                dirTree->directories[i].numberOfDirectories = 0;
+                dirTree->directories[i].numberOfFiles = 0;
+                
+                for (j = i; j < dirTree->numberOfDirectories - 1; j++)
+                    dirTree->directories[j] = dirTree->directories[j + 1];
+                dirTree->numberOfDirectories--;
+                dirTree->directories = (struct DirTree *)realloc(dirTree->directories, dirTree->numberOfDirectories * sizeof(struct DirTree));
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 // int main()
 // {
 //     struct CombinedFilesInfo combinedFilesInfoAll[MAX_SS];
