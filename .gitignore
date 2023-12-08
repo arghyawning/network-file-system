@@ -1,5 +1,7 @@
 notes.txt
-test/server
-test/client
+# test/server
+# test/client
 *.o
 *.out
+tasks.md
+test
